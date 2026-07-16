@@ -72,7 +72,16 @@
         }
       ],
       "expo-asset",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "2266334640859593",
+          "clientToken": "63a00ff8a26f9a0b50dc5c7408b303eb",
+          "displayName": "Konnect",
+          "scheme": "fb2266334640859593"
+        }
+      ]
     ]
   }
 }

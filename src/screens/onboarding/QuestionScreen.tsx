@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   Image,
   ImageSourcePropType,
@@ -72,7 +73,8 @@ const ICONS: Record<string, ImageSourcePropType> = {
 
 const CARD_GAP = sx(12);
 const CARD_W = (W - sx(40) - CARD_GAP) / 2;
-const CARD_H = sy(144);
+// Square-ish cards per Figma: big icon on top, label underneath.
+const CARD_H = CARD_W;
 
 function chunk<T>(arr: T[], n: number): T[][] {
   const res: T[][] = [];
@@ -149,7 +151,7 @@ export function QuestionScreen({
         ? renderList(question, selected, isMulti, onToggle)
         : layout === 'grid'
         ? renderGrid(question, selected, onToggle)
-        : renderPills(question, selected, onToggle)}
+        : <WheelPicker question={question} selected={selected} onToggle={onToggle} />}
 
       {/* Bottom bar */}
       <View style={styles.bottomBar}>
@@ -245,19 +247,22 @@ function renderGrid(
                   { width: CARD_W, height: CARD_H },
                 ]}
               >
-                {icon ? (
-                  <Image
-                    source={icon}
-                    style={[styles.gridImg, { width: CARD_W * 0.6, height: CARD_H * 0.55 }]}
-                    resizeMode="contain"
-                  />
-                ) : null}
-                <Text style={[styles.gridLabel, isSel && styles.gridLabelSel]}>{opt.label}</Text>
-                {isSel ? (
-                  <View style={styles.gridBadge}>
-                    <Ionicons name="checkmark" size={sx(12)} color="#fff" />
-                  </View>
-                ) : null}
+                <View style={styles.gridIconWrap}>
+                  {icon ? (
+                    <Image
+                      source={icon}
+                      style={{ width: CARD_W * 0.5, height: CARD_W * 0.45 }}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                  {/* Check badge sits on the icon's top-right, like the Figma */}
+                  {isSel ? (
+                    <View style={styles.gridBadge}>
+                      <Ionicons name="checkmark" size={sx(13)} color="#fff" />
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.gridLabel}>{opt.label}</Text>
               </Pressable>
             );
           })}
@@ -267,31 +272,117 @@ function renderGrid(
   );
 }
 
-// --- Pills (stay duration) ----------------------------------------------------
-function renderPills(
-  question: OnboardingQuestion,
-  selected: string[],
-  onToggle: (id: string) => void,
-) {
+// --- Wheel / tumbler picker (stay duration) ------------------------------------
+// The centered row is the selection; neighbours fade, shrink and tilt away like
+// a rotating drum. Snap-scrolling keeps a row locked in the centre.
+const WHEEL_ITEM_H = sy(64);
+const WHEEL_VISIBLE = 5; // odd → one exact centre row
+
+function WheelPicker({
+  question,
+  selected,
+  onToggle,
+}: {
+  question: OnboardingQuestion;
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const options = question.options;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<any>(null);
+  const onToggleRef = useRef(onToggle);
+  onToggleRef.current = onToggle;
+
+  useEffect(() => {
+    // The wheel always has a value: preselect the initial centre row and jump
+    // the scroll position to any previously chosen option.
+    const initialIndex = Math.max(0, options.findIndex((o) => selected.includes(o.id)));
+    if (selected.length === 0 && options.length > 0) {
+      onToggleRef.current(options[0].id);
+    }
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: initialIndex * WHEEL_ITEM_H, animated: false });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.key]);
+
+  const settleOnIndex = (offsetY: number) => {
+    const idx = Math.min(options.length - 1, Math.max(0, Math.round(offsetY / WHEEL_ITEM_H)));
+    const opt = options[idx];
+    if (opt && !selected.includes(opt.id)) onToggle(opt.id);
+  };
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.pillContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {question.options.map((opt) => {
-        const isSel = selected.includes(opt.id);
-        return (
-          <Pressable
-            key={opt.id}
-            onPress={() => onToggle(opt.id)}
-            style={[styles.pill, isSel && styles.pillSel]}
-          >
-            <Text style={[styles.pillText, isSel && styles.pillTextSel]}>{opt.label}</Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.wheelOuter}>
+      <View style={styles.wheelWrap}>
+        {/* Static highlight pill behind the centre row */}
+        <View style={styles.wheelCenterPill} pointerEvents="none" />
+        <Animated.ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          snapToInterval={WHEEL_ITEM_H}
+          decelerationRate="fast"
+          bounces={false}
+          overScrollMode="never"
+          contentContainerStyle={{ paddingVertical: WHEEL_ITEM_H * ((WHEEL_VISIBLE - 1) / 2) }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => settleOnIndex(e.nativeEvent.contentOffset.y)}
+          onScrollEndDrag={(e) => settleOnIndex(e.nativeEvent.contentOffset.y)}
+          style={{ height: WHEEL_ITEM_H * WHEEL_VISIBLE }}
+        >
+          {options.map((opt, i) => {
+            const inputRange = [
+              (i - 2) * WHEEL_ITEM_H,
+              (i - 1) * WHEEL_ITEM_H,
+              i * WHEEL_ITEM_H,
+              (i + 1) * WHEEL_ITEM_H,
+              (i + 2) * WHEEL_ITEM_H,
+            ];
+            const opacity = scrollY.interpolate({
+              inputRange,
+              outputRange: [0.16, 0.42, 1, 0.42, 0.16],
+              extrapolate: 'clamp',
+            });
+            const scale = scrollY.interpolate({
+              inputRange,
+              outputRange: [0.8, 0.9, 1, 0.9, 0.8],
+              extrapolate: 'clamp',
+            });
+            const rotateX = scrollY.interpolate({
+              inputRange,
+              outputRange: ['42deg', '24deg', '0deg', '-24deg', '-42deg'],
+              extrapolate: 'clamp',
+            });
+            const isSel = selected.includes(opt.id);
+            return (
+              <Animated.View
+                key={opt.id}
+                style={[
+                  styles.wheelItem,
+                  { opacity, transform: [{ perspective: 800 }, { rotateX }, { scale }] },
+                ]}
+              >
+                <Pressable
+                  style={styles.wheelItemPress}
+                  onPress={() => {
+                    scrollRef.current?.scrollTo({ y: i * WHEEL_ITEM_H, animated: true });
+                    onToggle(opt.id);
+                  }}
+                >
+                  <Text style={[styles.wheelText, isSel && styles.wheelTextSel]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              </Animated.View>
+            );
+          })}
+        </Animated.ScrollView>
+      </View>
+    </View>
   );
 }
 
@@ -465,68 +556,82 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     backgroundColor: '#fff',
-    borderRadius: radius.lg,
+    borderRadius: sx(18),
     borderWidth: 2,
-    borderColor: colors.blue[100],
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: sy(10),
-    gap: sy(8),
+    paddingVertical: sy(14),
+    gap: sy(12),
   },
   gridCardSel: {
     borderColor: colors.blue[500],
-    backgroundColor: colors.blue[100],
+    backgroundColor: '#eaf2ff',
   },
-  gridImg: { },
+  gridIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   gridLabel: {
     fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(14),
-    lineHeight: sy(20),
-    color: colors.gray[1100],
+    fontSize: sx(15),
+    lineHeight: sy(21),
+    color: '#1d192b',
     textAlign: 'center',
-    letterSpacing: -0.14,
+    letterSpacing: -0.15,
   },
-  gridLabelSel: { color: colors.blue[600] },
   gridBadge: {
     position: 'absolute',
-    top: sx(8),
-    right: sx(8),
-    width: sx(22),
-    height: sx(22),
+    top: -sx(4),
+    right: -sx(16),
+    width: sx(24),
+    height: sx(24),
     borderRadius: radius.full,
     backgroundColor: colors.blue[500],
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // Pills
-  pillContent: {
-    paddingHorizontal: sx(36),
-    paddingVertical: sy(16),
-    gap: sy(12),
-    alignItems: 'center',
-  },
-  pill: {
-    width: W - sx(72),
-    height: sy(56),
-    borderRadius: radius.full,
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: colors.blue[100],
+  // Wheel picker
+  wheelOuter: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pillSel: {
-    backgroundColor: colors.blue[500],
-    borderColor: colors.blue[500],
+  wheelWrap: {
+    width: W - sx(48),
+    justifyContent: 'center',
   },
-  pillText: {
+  wheelCenterPill: {
+    position: 'absolute',
+    top: WHEEL_ITEM_H * ((WHEEL_VISIBLE - 1) / 2) + sy(4),
+    left: sx(8),
+    right: sx(8),
+    height: WHEEL_ITEM_H - sy(8),
+    borderRadius: radius.full,
+    backgroundColor: '#e2eeff',
+  },
+  wheelItem: {
+    height: WHEEL_ITEM_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wheelItemPress: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  wheelText: {
     fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(16),
+    fontSize: sx(17),
     color: colors.gray[1000],
-    letterSpacing: -0.16,
+    letterSpacing: -0.17,
   },
-  pillTextSel: { color: '#fff' },
+  wheelTextSel: {
+    fontFamily: 'NationalPark_700Bold',
+    color: '#1d192b',
+  },
 
   // Bottom bar
   bottomBar: {

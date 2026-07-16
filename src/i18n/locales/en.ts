@@ -73,6 +73,7 @@ const en = {
     line2Prefix: 'around',
     line2Bold: 'Korea',
     subtitle: 'Trusted by 100k travelers',
+    signingIn: 'Signing you in...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const en = {
     welcomeTitle: 'Welcome! {{name}}',
     welcomeSubtitle: 'Your account is ready',
     letsKonnect: "Let's Konnect!",
+    setupTitle: "Let's get you set up",
+    setupSubtitle: 'A few quick questions to personalize your experience',
   },
 };
 

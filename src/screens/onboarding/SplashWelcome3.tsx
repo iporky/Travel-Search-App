@@ -164,12 +164,12 @@ export function SplashWelcome3({ onPress, active }: Props) {
       {/* Logo */}
       <Image
         source={LOGO}
-        style={{ position: 'absolute', left: sx(20), top: sy(66), width: sx(92), height: sy(15) }}
+        style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }}
         resizeMode="contain"
       />
 
       {/* Bottom text & pagination */}
-      <View style={[styles.bottomContent, { bottom: sy(136), paddingHorizontal: sx(16) }]}>
+      <View style={[styles.bottomContent, { bottom: sy(172), paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
           <View style={styles.titleRow}>
             <Text style={styles.titleBold}>{t('splash.three.titleBold')} </Text>
@@ -177,11 +177,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
           </View>
           <Text style={styles.subtitle}>{t('splash.three.subtitle')}</Text>
         </View>
-        <View style={styles.pagination}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View key={i} style={[styles.dot, { backgroundColor: i === 2 ? '#527dff' : '#c9e3ff' }]} />
-          ))}
-        </View>
+        {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
 
       </View>
     </Pressable>

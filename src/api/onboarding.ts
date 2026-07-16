@@ -53,10 +53,10 @@ export const OCCUPATION_QUESTION: OnboardingQuestion = {
   options: [
     { id: 'student',      label: 'Student',      iconAsset: 'name_student_4x'      },
     { id: 'employee',     label: 'Employee',     iconAsset: 'name_employee_4x'     },
-    { id: 'teacher',      label: 'Teacher',      iconAsset: 'name_teacher_4x'      },
+    { id: 'vacation',     label: 'Vacation',     iconAsset: 'name_vacation_4x'     },
     { id: 'entrepreneur', label: 'Entrepreneur', iconAsset: 'name_entrepreneur_4x' },
     { id: 'freelancer',   label: 'Freelancer',   iconAsset: 'name_freelancer_4x'   },
-    { id: 'vacation',     label: 'Vacation',     iconAsset: 'name_vacation_4x'     },
+    { id: 'other',        label: 'Other',        iconAsset: 'name_teacher_4x'      },
   ],
 };
 

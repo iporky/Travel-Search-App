@@ -194,6 +194,18 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         <Ionicons name="globe-outline" size={sx(20)} color="#1d192b" />
       </Pressable>
 
+      {/* Stationary pagination dots — fixed above the Get started button */}
+      {activeIndex < SIGNIN_SLIDE ? (
+        <View style={styles.fixedDotsRow} pointerEvents="none">
+          {SLIDES.map((s, i) => (
+            <View
+              key={s.id}
+              style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]}
+            />
+          ))}
+        </View>
+      ) : null}
+
       {activeIndex < SIGNIN_SLIDE ? (
         <Pressable onPress={goToSignIn} style={styles.globalGetStartedBtn}>
           <Text style={styles.globalGetStartedText}>Get started</Text>
@@ -216,11 +228,9 @@ const styles = StyleSheet.create({
     width: sx(36),
     height: sx(36),
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
-    elevation: 6,
   },
   bottomContent: {
     position: 'absolute',
@@ -262,20 +272,30 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: spacing[1],
   },
+  fixedDotsRow: {
+    position: 'absolute',
+    bottom: sy(140),
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: sx(8),
+    zIndex: 20,
+  },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: sx(8),
+    height: sx(8),
+    borderRadius: 9999,
   },
   dotActive: {
-    backgroundColor: colors.blue[600],
+    backgroundColor: '#527dff',
   },
   dotInactive: {
-    backgroundColor: colors.blue[200],
+    backgroundColor: '#c9e3ff',
   },
   globalGetStartedBtn: {
     position: 'absolute',
-    bottom: sy(48),
+    bottom: sy(84),
     minHeight: sy(37),
     minWidth: sx(120),
     maxWidth: '85%',

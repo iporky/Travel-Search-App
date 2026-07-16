@@ -52,23 +52,26 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
     mainOpacity.setValue(0);
     mainScale.setValue(0.9);
 
-    // Bird 1 (left, background) appears first
-    Animated.timing(leftOpacity, { toValue: 0.55, duration: 600, useNativeDriver: true }).start();
-
-    // Bird 2 (right, closer) appears ~0.8s later
-    Animated.sequence([
-      Animated.delay(800),
-      Animated.timing(rightOpacity, { toValue: 0.7, duration: 600, useNativeDriver: true }),
-    ]).start();
-
-    // Main bird (foreground) appears ~1.6s, scale 90% -> 100% natural settle
-    Animated.sequence([
-      Animated.delay(1600),
+    // Sequential reveal: bird 1 appears then fully disappears, bird 2 appears
+    // then fully disappears, and only the final hero bird settles and stays —
+    // no background birds are left behind.
+    const seq = Animated.sequence([
+      // Bird 1: in → hold → out
+      Animated.timing(leftOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.delay(350),
+      Animated.timing(leftOpacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+      // Bird 2: in → hold → out
+      Animated.timing(rightOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.delay(350),
+      Animated.timing(rightOpacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+      // Final hero bird: fade in + natural settle, stays visible
       Animated.parallel([
         Animated.timing(mainOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.spring(mainScale, { toValue: 1, friction: 5, tension: 60, useNativeDriver: true }),
       ]),
-    ]).start();
+    ]);
+    seq.start();
+    return () => seq.stop();
   }, [active]);
 
   useEffect(() => {
@@ -127,10 +130,10 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
         resizeMode="cover"
         style={{
           position: 'absolute',
-          left: sx(70), top: sy(350),
+          left: sx(70), top: sy(322),
           width: sx(230), height: sy(180),
           opacity: mainOpacity,
-          transform: [{ translateY: tyMain }],
+          transform: [{ translateY: tyMain }, { scale: mainScale }],
         }}
       />
 
@@ -138,11 +141,11 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
       <Image
         source={LOGO}
         resizeMode="contain"
-        style={{ position: 'absolute', left: sx(20), top: sy(66), width: sx(92), height: sy(15), zIndex: 10 }}
+        style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15), zIndex: 10 }}
       />
 
       {/* Bottom content */}
-      <View style={[styles.bottomContent, { bottom: sy(136), paddingHorizontal: sx(16) }]}>
+      <View style={[styles.bottomContent, { bottom: sy(172), paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
           <View style={styles.titleRow}>
             <Text style={styles.titleBold}>{t('splash.one.titleBold')} </Text>
@@ -150,11 +153,7 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
           </View>
           <Text style={styles.subtitle}>{t('splash.one.subtitle')}</Text>
         </View>
-        <View style={styles.dotsRow}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View key={i} style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]} />
-          ))}
-        </View>
+        {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
       </View>
     </Pressable>
   );

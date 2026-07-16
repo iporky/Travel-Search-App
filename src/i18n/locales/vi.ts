@@ -73,6 +73,7 @@ const vi = {
     line2Prefix: 'khám phá',
     line2Bold: 'Hàn Quốc',
     subtitle: 'Được 100 nghìn du khách tin dùng',
+    signingIn: 'Đang đăng nhập...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const vi = {
     welcomeTitle: 'Chào mừng! {{name}}',
     welcomeSubtitle: 'Tài khoản của bạn đã sẵn sàng',
     letsKonnect: 'Cùng Konnect nào!',
+    setupTitle: 'Hãy bắt đầu thiết lập',
+    setupSubtitle: 'Vài câu hỏi nhanh để cá nhân hóa trải nghiệm của bạn',
   },
 };
 

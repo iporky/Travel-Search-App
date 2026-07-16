@@ -73,6 +73,7 @@ const zhTW = {
     line2Prefix: '暢遊',
     line2Bold: '韓國',
     subtitle: '深受 10 萬名旅客信賴',
+    signingIn: '正在登入...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const zhTW = {
     welcomeTitle: '歡迎！{{name}}',
     welcomeSubtitle: '你的帳戶已就緒',
     letsKonnect: '開始 Konnect 吧！',
+    setupTitle: '讓我們開始設定吧',
+    setupSubtitle: '幾個小問題，為您打造專屬體驗',
   },
 };
 

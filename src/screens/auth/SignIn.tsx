@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   Alert,
   Animated,
@@ -7,12 +8,16 @@ import {
   Easing,
   Image,
   ImageSourcePropType,
+  Modal,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
@@ -36,10 +41,41 @@ interface Props {
   active?: boolean;
 }
 
+// Placeholder legal copy shown in the policy overlay until real content exists.
+const POLICY_TEXT: Record<'terms' | 'privacy', { title: string; body: string }> = {
+  terms: {
+    title: 'Terms of Use',
+    body:
+      'Welcome to Konnect. By using this app you agree to these Terms of Use.\n\n' +
+      '1. Service. Konnect provides travel information and community features for visitors to Korea. Content is provided "as is" without warranties of any kind.\n\n' +
+      '2. Accounts. You are responsible for maintaining the security of your account and for all activity that occurs under it.\n\n' +
+      '3. Acceptable use. You agree not to misuse the service, post unlawful content, or interfere with other users\' enjoyment of the app.\n\n' +
+      '4. Content. Recommendations and answers are informational only and may not always be accurate or up to date. Always verify critical information (visas, emergencies, transport) with official sources.\n\n' +
+      '5. Termination. We may suspend or terminate accounts that violate these terms.\n\n' +
+      '6. Changes. We may update these terms from time to time; continued use constitutes acceptance.\n\n' +
+      'This is placeholder text and will be replaced with the final Terms of Use.',
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    body:
+      'Your privacy matters to us. This policy explains what data Konnect collects and how it is used.\n\n' +
+      '1. Data we collect. Account details from your sign-in provider (name, email, photo), onboarding preferences, and usage data such as searches within the app.\n\n' +
+      '2. How we use it. To personalize recommendations, improve the service, and provide customer support. Voice input is processed only to convert speech to text for your search.\n\n' +
+      '3. Sharing. We do not sell your personal data. Limited data may be shared with service providers (e.g. authentication, analytics) under strict agreements.\n\n' +
+      '4. Retention. Data is kept only as long as needed for the purposes above, or as required by law.\n\n' +
+      '5. Your rights. You may request access, correction, or deletion of your data at any time from Profile → Privacy.\n\n' +
+      'This is placeholder text and will be replaced with the final Privacy Policy.',
+  },
+};
+
 export function SignIn({ onPress, active }: Props) {
   const { t } = useTranslation();
-  const { signInWithApple, signInWithGoogle } = useAuth();
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const { signInWithApple, signInWithGoogle, signInWithFacebook } = useAuth();
+  // Covers the whole screen while a provider sign-in + Firebase exchange runs.
+  // On success it stays visible until this screen unmounts (auth state flips),
+  // so the user never stares at a frozen sign-in page.
+  const [authLoading, setAuthLoading] = useState(false);
+  const [policy, setPolicy] = useState<'terms' | 'privacy' | null>(null);
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const floatBird = useRef(new Animated.Value(0)).current;
   const mountedRef = useRef(true);
@@ -62,12 +98,15 @@ export function SignIn({ onPress, active }: Props) {
   const birdY = floatBird.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
 
   const handleGooglePress = async () => {
-    if (!active || googleLoading || AppState.currentState !== 'active') return;
+    if (!active || authLoading || AppState.currentState !== 'active') return;
 
     try {
-      setGoogleLoading(true);
-      await signInWithGoogle();
+      setAuthLoading(true);
+      const ok = await signInWithGoogle();
+      // Cancelled → hide the loader. Success → keep it until unmount.
+      if (!ok && mountedRef.current) setAuthLoading(false);
     } catch (error: any) {
+      if (mountedRef.current) setAuthLoading(false);
       const msg = String(error?.message ?? '').toLowerCase();
       if (
         msg.includes('current activity is null') ||
@@ -80,16 +119,30 @@ export function SignIn({ onPress, active }: Props) {
       if (mountedRef.current && AppState.currentState === 'active') {
         Alert.alert('Google sign-in failed', String(error?.message ?? 'Please try again.'));
       }
-    } finally {
-      if (mountedRef.current) setGoogleLoading(false);
     }
   };
 
   const handleApplePress = async () => {
+    if (authLoading) return;
     try {
-      await signInWithApple();
+      setAuthLoading(true);
+      const ok = await signInWithApple();
+      if (!ok && mountedRef.current) setAuthLoading(false);
     } catch (error: any) {
+      if (mountedRef.current) setAuthLoading(false);
       Alert.alert('Apple sign-in failed', String(error?.message ?? 'Please try again.'));
+    }
+  };
+
+  const handleFacebookPress = async () => {
+    if (authLoading) return;
+    try {
+      setAuthLoading(true);
+      const ok = await signInWithFacebook();
+      if (!ok && mountedRef.current) setAuthLoading(false);
+    } catch (error: any) {
+      if (mountedRef.current) setAuthLoading(false);
+      Alert.alert('Facebook sign-in failed', String(error?.message ?? 'Please try again.'));
     }
   };
 
@@ -104,7 +157,7 @@ export function SignIn({ onPress, active }: Props) {
 
 
       {/* Logo */}
-      <Image source={LOGO} style={{ position: 'absolute', left: sx(20), top: sy(66), width: sx(92), height: sy(15) }} resizeMode="contain" />
+      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }} resizeMode="contain" />
 
       {/* Content frame: top=188, bottom=76 from screen edge */}
       <View style={styles.contentFrame}>
@@ -137,11 +190,11 @@ export function SignIn({ onPress, active }: Props) {
               <TouchableOpacity
                 onPress={Platform.OS === 'android' ? handleGooglePress : undefined}
                 activeOpacity={0.85}
-                disabled={Platform.OS === 'android' ? googleLoading || !active : false}
+                disabled={Platform.OS === 'android' ? authLoading || !active : false}
               >
                 <Image source={ICON_GOOGLE} style={styles.googleIcon} resizeMode="cover" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+              <TouchableOpacity onPress={handleFacebookPress} activeOpacity={0.85}>
                 <Image source={ICON_FACEBOOK} style={styles.facebookIcon} resizeMode="cover" />
               </TouchableOpacity>
             </View>
@@ -150,9 +203,62 @@ export function SignIn({ onPress, active }: Props) {
 
         {/* Terms */}
         <Animated.Text style={[styles.terms, { opacity: fadeAnim }]}>
-          {'By creating an account, you agree to our\nTerms of Use and Privacy Policy.'}
+          {'By creating an account, you agree to our\n'}
+          <Text style={styles.termsLink} onPress={() => setPolicy('terms')}>
+            Terms of Use
+          </Text>
+          {' and '}
+          <Text style={styles.termsLink} onPress={() => setPolicy('privacy')}>
+            Privacy Policy
+          </Text>
+          .
         </Animated.Text>
       </View>
+
+      {/* Full-screen loader while the provider sign-in + Firebase exchange runs.
+          Rendered in a transparent Modal (its own window, translucent bars) so
+          it never affects the layout or size of the screen behind it. */}
+      <Modal
+        visible={authLoading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {}}
+      >
+        <View style={styles.authLoadingOverlay}>
+          <View style={styles.authLoadingCard}>
+            <ActivityIndicator size="large" color="#527dff" />
+            <Text style={styles.authLoadingText}>{t('signIn.signingIn')}</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Policy overlay (Terms of Use / Privacy Policy) */}
+      <Modal
+        visible={policy !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPolicy(null)}
+      >
+        <Pressable style={styles.policyBackdrop} onPress={() => setPolicy(null)}>
+          {/* Stop backdrop press from closing when tapping the card itself */}
+          <Pressable style={styles.policyCard} onPress={() => {}}>
+            <View style={styles.policyHeader}>
+              <Text style={styles.policyTitle}>{policy ? POLICY_TEXT[policy].title : ''}</Text>
+              <Pressable onPress={() => setPolicy(null)} hitSlop={12} style={styles.policyCloseBtn}>
+                <Ionicons name="close" size={sx(22)} color="#657586" />
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.policyScroll}
+              contentContainerStyle={styles.policyScrollContent}
+              showsVerticalScrollIndicator
+            >
+              <Text style={styles.policyBody}>{policy ? POLICY_TEXT[policy].body : ''}</Text>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -263,6 +369,85 @@ const styles = StyleSheet.create({
     color: '#93a5b9',
     textAlign: 'center',
     lineHeight: sy(16),
+  },
+  termsLink: {
+    fontFamily: 'NationalPark_600SemiBold',
+    color: '#527dff',
+    textDecorationLine: 'underline',
+  },
+  authLoadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(234, 244, 255, 0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authLoadingCard: {
+    alignItems: 'center',
+    gap: sy(14),
+    backgroundColor: '#ffffff',
+    borderRadius: sx(20),
+    paddingVertical: sy(28),
+    paddingHorizontal: sx(36),
+    shadowColor: '#0077ff',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  authLoadingText: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(15),
+    color: '#3a4657',
+    letterSpacing: -0.15,
+  },
+  policyBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 26, 96, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: sx(20),
+  },
+  policyCard: {
+    width: '100%',
+    maxHeight: H * 0.72,
+    backgroundColor: '#ffffff',
+    borderRadius: sx(20),
+    paddingTop: sy(16),
+    paddingBottom: sy(20),
+    overflow: 'hidden',
+  },
+  policyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: sx(20),
+    paddingRight: sx(12),
+    marginBottom: sy(10),
+  },
+  policyTitle: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: sx(18),
+    color: '#1d192b',
+    letterSpacing: -0.18,
+  },
+  policyCloseBtn: {
+    width: sx(32),
+    height: sx(32),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policyScroll: {
+    paddingHorizontal: sx(20),
+  },
+  policyScrollContent: {
+    paddingBottom: sy(8),
+  },
+  policyBody: {
+    fontFamily: 'NationalPark_400Regular',
+    fontSize: sx(14),
+    lineHeight: sy(22),
+    color: '#3a4657',
+    letterSpacing: -0.1,
   },
   homeIndicator: {
     position: 'absolute',

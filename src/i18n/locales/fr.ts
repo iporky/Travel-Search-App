@@ -73,6 +73,7 @@ const fr = {
     line2Prefix: 'découvrir la',
     line2Bold: 'Corée',
     subtitle: 'La confiance de 100k voyageurs',
+    signingIn: 'Connexion en cours...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const fr = {
     welcomeTitle: 'Bienvenue ! {{name}}',
     welcomeSubtitle: 'Votre compte est prêt',
     letsKonnect: 'Konnectons-nous !',
+    setupTitle: 'Configurons votre compte',
+    setupSubtitle: 'Quelques questions rapides pour personnaliser votre expérience',
   },
 };
 

@@ -73,6 +73,7 @@ const ja = {
     line2Prefix: '巡る旅を',
     line2Bold: '韓国',
     subtitle: '10万人の旅行者に信頼されています',
+    signingIn: 'サインイン中...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const ja = {
     welcomeTitle: 'ようこそ！{{name}}さん',
     welcomeSubtitle: 'アカウントの準備ができました',
     letsKonnect: 'Konnectを始めよう！',
+    setupTitle: 'セットアップを始めましょう',
+    setupSubtitle: 'いくつかの質問であなたに合わせてカスタマイズします',
   },
 };
 

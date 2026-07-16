@@ -73,6 +73,7 @@ const zh = {
     line2Prefix: '畅游',
     line2Bold: '韩国',
     subtitle: '深受 10 万名旅行者信赖',
+    signingIn: '正在登录...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const zh = {
     welcomeTitle: '欢迎！{{name}}',
     welcomeSubtitle: '你的账户已就绪',
     letsKonnect: '开始 Konnect 吧！',
+    setupTitle: '让我们开始设置吧',
+    setupSubtitle: '几个小问题，为您定制专属体验',
   },
 };
 

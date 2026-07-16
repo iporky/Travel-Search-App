@@ -7,6 +7,7 @@ import {
   Easing,
   Image,
   ImageSourcePropType,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -58,7 +59,9 @@ interface Props {
 
 export function OnboardingFlow({ onComplete }: Props) {
   const { user } = useAuth();
-  const [phase, setPhase] = useState<'questions' | 'welcome'>('questions');
+  // 'intro' shows a brief "Let's get you set up" transition so the questions
+  // don't appear abruptly right after sign-in.
+  const [phase, setPhase] = useState<'intro' | 'questions' | 'welcome'>('intro');
   // Start with Flow A default; branch after purpose is answered
   const [questionList, setQuestionList] = useState<OnboardingQuestion[]>(FLOW_A_QUESTIONS);
   const [step, setStep] = useState(0);
@@ -144,22 +147,36 @@ export function OnboardingFlow({ onComplete }: Props) {
   const progress = (step + 0.5) / total;
 
   let body: React.ReactNode;
-  if (phase === 'welcome') {
+  if (phase === 'intro') {
+    body = <SetupIntro onDone={() => setPhase('questions')} />;
+  } else if (phase === 'welcome') {
     body = <Welcome name={user?.name || 'Traveler'} onContinue={onComplete} />;
   } else if (current?.layout === 'counter') {
-    // NumberOfPeople stepper — custom screen, not the standard QuestionScreen.
+    // NumberOfPeople stepper — a bottom-sheet overlay on top of the previous
+    // question (per Figma), not a standalone screen.
+    const prevQuestion = step > 0 ? questionList[step - 1] : null;
     body = (
-      <CounterScreen
-        question={current}
-        progress={progress}
-        canGoBack={step > 0}
-        onBack={handleBack}
-        onConfirm={(value) => {
-          setAnswers((prev) => ({ ...prev, [current.key]: [String(value)] }));
-          if (step < total - 1) setStep((s) => s + 1);
-          else setPhase('welcome');
-        }}
-      />
+      <>
+        {prevQuestion ? (
+          <QuestionScreen
+            question={prevQuestion}
+            selected={answers[prevQuestion.key] ?? []}
+            onToggle={() => {}}
+            onConfirm={() => {}}
+            onBack={() => {}}
+            progress={progress}
+            canGoBack={false}
+          />
+        ) : null}
+        <CounterOverlay
+          onClose={handleBack}
+          onConfirm={(value) => {
+            setAnswers((prev) => ({ ...prev, [current.key]: [String(value)] }));
+            if (step < total - 1) setStep((s) => s + 1);
+            else setPhase('welcome');
+          }}
+        />
+      </>
     );
   } else if (current) {
     body = (
@@ -190,7 +207,184 @@ export function OnboardingFlow({ onComplete }: Props) {
   );
 }
 
-// ─── Number-of-people counter screen ─────────────────────────────────────────
+// ─── "Let's get you set up" intro transition ─────────────────────────────────
+function SetupIntro({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation();
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.92)).current;
+  const rise = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    const anim = Animated.sequence([
+      // Fade + rise + settle in
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 550,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(rise, {
+          toValue: 0,
+          duration: 550,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
+      ]),
+      // Hold long enough to read
+      Animated.delay(1400),
+      // Fade out, then hand off to the questions
+      Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+    ]);
+    anim.start(({ finished }) => {
+      if (finished) onDone();
+    });
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <View style={introStyles.root}>
+      <Animated.View
+        style={[introStyles.center, { opacity, transform: [{ translateY: rise }, { scale }] }]}
+      >
+        <Image source={BIRD} style={introStyles.bird} resizeMode="contain" />
+        <Text style={introStyles.title}>{t('onboarding.setupTitle')}</Text>
+        <Text style={introStyles.subtitle}>{t('onboarding.setupSubtitle')}</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+const introStyles = StyleSheet.create({
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { alignItems: 'center', paddingHorizontal: sx(32), gap: sy(14) },
+  bird: { width: sx(150), height: sy(118), marginBottom: sy(6) },
+  title: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: sx(28),
+    color: '#1d192b',
+    letterSpacing: -0.8,
+    lineHeight: sy(36),
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(15),
+    color: '#657586',
+    textAlign: 'center',
+    lineHeight: sy(22),
+    letterSpacing: -0.15,
+  },
+});
+
+// ─── Number-of-people bottom-sheet overlay ───────────────────────────────────
+function CounterOverlay({
+  onClose,
+  onConfirm,
+}: {
+  onClose: () => void;
+  onConfirm: (value: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [count, setCount] = useState(2);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      {/* Backdrop tap = go back to the previous question */}
+      <Pressable style={sheet.backdrop} onPress={onClose}>
+        <Pressable style={sheet.sheet} onPress={() => {}}>
+          <Text style={sheet.title}>{t('onboarding.numberOfPeople')}</Text>
+          <View style={sheet.row}>
+            <Pressable
+              onPress={() => setCount((c) => Math.max(2, c - 1))}
+              style={sheet.stepBtn}
+              hitSlop={12}
+            >
+              <Text style={sheet.stepBtnText}>−</Text>
+            </Pressable>
+            <Text style={sheet.value}>{count}</Text>
+            <Pressable onPress={() => setCount((c) => c + 1)} style={sheet.stepBtn} hitSlop={12}>
+              <Text style={sheet.stepBtnText}>+</Text>
+            </Pressable>
+          </View>
+          <Pressable onPress={() => onConfirm(count)} style={sheet.cta}>
+            <Text style={sheet.ctaText}>{t('common.confirm')}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheet = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 26, 96, 0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: sx(28),
+    borderTopRightRadius: sx(28),
+    paddingTop: sy(26),
+    paddingBottom: sy(28),
+    paddingHorizontal: sx(20),
+    alignItems: 'center',
+    gap: sy(18),
+  },
+  title: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: sx(20),
+    color: '#1d192b',
+    letterSpacing: -0.2,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sx(28),
+  },
+  stepBtn: {
+    width: sx(44),
+    height: sx(44),
+    borderRadius: 999,
+    backgroundColor: '#eaf2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: {
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(24),
+    color: '#8ca0b7',
+    lineHeight: sx(28),
+  },
+  value: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: sx(44),
+    color: '#1d192b',
+    letterSpacing: -0.88,
+    minWidth: sx(84),
+    textAlign: 'center',
+  },
+  cta: {
+    alignSelf: 'stretch',
+    height: sy(56),
+    borderRadius: 999,
+    backgroundColor: '#527dff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: sy(4),
+  },
+  ctaText: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(16),
+    color: '#f2f9ff',
+    letterSpacing: -0.16,
+  },
+});
+
+// ─── Number-of-people counter screen (unused — replaced by CounterOverlay) ────
 function CounterScreen({
   question,
   progress,

@@ -73,6 +73,7 @@ const th = {
     line2Prefix: 'เที่ยวทั่ว',
     line2Bold: 'เกาหลี',
     subtitle: 'ได้รับความไว้วางใจจากนักเดินทาง 100,000 คน',
+    signingIn: 'กำลังเข้าสู่ระบบ...',
   },
   splash: {
     one: {
@@ -106,6 +107,8 @@ const th = {
     welcomeTitle: 'ยินดีต้อนรับ! {{name}}',
     welcomeSubtitle: 'บัญชีของคุณพร้อมแล้ว',
     letsKonnect: 'มา Konnect กันเถอะ!',
+    setupTitle: 'มาเริ่มตั้งค่ากันเถอะ',
+    setupSubtitle: 'คำถามสั้น ๆ เพื่อปรับประสบการณ์ให้เหมาะกับคุณ',
   },
 };
 

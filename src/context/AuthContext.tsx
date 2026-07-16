@@ -33,8 +33,16 @@ import {
   isErrorWithCode,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import { AccessToken, LoginManager, Settings as FBSettings } from 'react-native-fbsdk-next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DeviceInfo from 'react-native-device-info';
+import { Platform } from 'react-native';
 import { addUser } from '../api/users';
+import { verifyFirebaseSso } from '../api/auth';
+
+// Initialize the Facebook SDK once at module load (reads the app id / client
+// token from the native resources configured in AndroidManifest/strings.xml).
+FBSettings.initializeSDK();
 
 // ─── Client IDs ─────────────────────────────────────────────────────────────
 // Web client (type 3) from google-services.json — required by Firebase to mint
@@ -72,8 +80,10 @@ interface AuthContextValue {
   hasCompletedPersonalization: boolean;
   /** When true, onboarding should open directly on the first question. */
   personalizationStartsFromQuestions: boolean;
-  signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
+  /** Resolve to true when actually signed in, false when the user cancelled. */
+  signInWithGoogle: () => Promise<boolean>;
+  signInWithApple: () => Promise<boolean>;
+  signInWithFacebook: () => Promise<boolean>;
   signOut: () => Promise<void>;
   markOnboardingDone: () => Promise<void>;
   completePersonalization: () => Promise<void>;
@@ -149,6 +159,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {
             console.warn('[Auth] addUser sync failed', e);
           }
+
+          // Verify the Firebase session with our backend, registering this
+          // device. Fire-and-forget: sign-in UX never blocks on it.
+          try {
+            const [firebaseToken, deviceId] = await Promise.all([
+              fbUser.getIdToken(),
+              DeviceInfo.getUniqueId(),
+            ]);
+            verifyFirebaseSso({
+              firebaseToken,
+              deviceId,
+              platform: Platform.OS,
+            }).catch((e) => console.warn('[Auth] verify-firebase failed', e?.message ?? e));
+          } catch (e) {
+            console.warn('[Auth] verify-firebase setup failed', e);
+          }
         }
       } else {
         setUser(null);
@@ -162,9 +188,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Google ─────────────────────────────────────────────────────────────────
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (): Promise<boolean> => {
     // Firebase session is already active; nothing to do.
-    if (auth().currentUser) return;
+    if (auth().currentUser) return true;
 
     const runGoogleFlow = async (forceInteractive = false) => {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -208,13 +234,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       await runGoogleFlow();
+      return true;
     } catch (error) {
       if (
         isErrorWithCode(error) &&
         (error.code === statusCodes.SIGN_IN_CANCELLED ||
           error.code === statusCodes.IN_PROGRESS)
       ) {
-        return; // user dismissed — not an error
+        return false; // user dismissed — not an error
       }
 
       const msg = String((error as any)?.message ?? '').toLowerCase();
@@ -224,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         msg.includes('current activity is null')
       ) {
         // Already signed in at SDK level or screen not attached to an Activity.
-        return;
+        return false;
       }
 
       // Release builds can surface stale Google ID tokens from cached sessions.
@@ -235,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await GoogleSignin.signOut().catch(() => {});
           await GoogleSignin.revokeAccess().catch(() => {});
           await runGoogleFlow(true);
-          return;
+          return true;
         } catch (retryError) {
           console.error('[Auth] Google retry failed', retryError);
           throw retryError;
@@ -248,15 +275,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Apple ──────────────────────────────────────────────────────────────────
-  const signInWithApple = useCallback(async () => {
+  const signInWithApple = useCallback(async (): Promise<boolean> => {
     try {
       const provider = new auth.OAuthProvider('apple.com');
       provider.addScope('email');
       provider.addScope('name');
       // Mark this as a fresh sign-in so onboarding questions run first.
       freshSignIn.current = true;
-      await auth().signInWithProvider(provider);
+      // RN Firebase v25 exposes the native web-OAuth flow as signInWithRedirect
+      // (there is no auth().signInWithProvider on the JS side).
+      await auth().signInWithRedirect(provider);
       // onAuthStateChanged drives state + backend sync.
+      return true;
     } catch (error: any) {
       const msg = String(error?.message ?? '').toLowerCase();
       if (
@@ -264,9 +294,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error?.code === 'auth/popup-closed-by-user' ||
         msg.includes('cancel')
       ) {
-        return; // user dismissed
+        return false; // user dismissed
       }
       console.error('[Auth] Apple sign-in error', error);
+      throw error;
+    }
+  }, []);
+
+  // ── Facebook ───────────────────────────────────────────────────────────────
+  // Facebook's TOS require the official Facebook SDK on Android (Firebase's
+  // generic OAuth flow is blocked for facebook.com). Flow: FB SDK native login
+  // → AccessToken → Firebase credential exchange → signInWithCredential.
+  // Requires facebook_app_id / facebook_client_token in strings.xml and the
+  // release key hash registered in the Facebook app settings.
+  const signInWithFacebook = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+      if (result.isCancelled) return false; // user dismissed — not an error
+
+      const token = await AccessToken.getCurrentAccessToken();
+      if (!token?.accessToken) {
+        throw new Error('Facebook login returned no access token.');
+      }
+
+      const credential = auth.FacebookAuthProvider.credential(token.accessToken);
+      // Mark this as a fresh sign-in so onboarding questions run first.
+      freshSignIn.current = true;
+      await auth().signInWithCredential(credential);
+      // onAuthStateChanged drives state + backend sync.
+      return true;
+    } catch (error: any) {
+      const msg = String(error?.message ?? '').toLowerCase();
+      if (msg.includes('cancel')) return false; // user dismissed
+      console.error('[Auth] Facebook sign-in error', error);
       throw error;
     }
   }, []);
@@ -340,6 +400,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         personalizationStartsFromQuestions,
         signInWithGoogle,
         signInWithApple,
+        signInWithFacebook,
         signOut,
         markOnboardingDone,
         completePersonalization,
