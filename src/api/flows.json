@@ -1,0 +1,201 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "2026-07-06",
+  "description": "Konnect App personalization onboarding flows. Every flow starts with the 'purpose' question and branches based on user answers. Refer to this file to understand how each flow is constructed.",
+
+  "flowSummary": {
+    "A": "Already in Korea → occupation → [stay if vacation] → interests",
+    "B": "LEGACY – Planning trip → occupation → stay_length → interests (replaced by D/E)",
+    "C": "Just exploring Konnect → interests",
+    "D": "Planning trip (solo/partner) → traveling_with → stay_length_de → destinations → interests",
+    "E": "Planning trip (group 2+)   → traveling_with → number_of_people → stay_length_de → interests"
+  },
+
+  "flows": [
+    {
+      "id": "A",
+      "title": "Already in Korea",
+      "trigger": "purpose === 'already_here'",
+      "description": "User is currently in Korea. Asks about occupation and interests. If they say 'vacation', a stay-duration sub-question is inserted.",
+      "steps": [
+        { "step": 1, "key": "purpose",    "question": "What brings you to Korea?",    "layout": "list" },
+        { "step": 2, "key": "occupation", "question": "What best describes you?",     "layout": "grid" },
+        { "step": "2b (conditional)", "key": "stay_length", "question": "How long is your stay in Korea?", "layout": "pill", "condition": "occupation === 'vacation'" },
+        { "step": "3", "key": "interests", "question": "What would you like to explore?", "layout": "list", "type": "multi" }
+      ],
+      "totalSteps": 3,
+      "totalStepsWithBranch": 4
+    },
+    {
+      "id": "B",
+      "title": "Planning Trip (LEGACY)",
+      "deprecated": true,
+      "replacedBy": ["D", "E"],
+      "trigger": "purpose === 'planning_trip' (no longer used — routes to D or E)",
+      "description": "Legacy flow kept for reference only. Active planning flows are D and E which ask about travel companion instead of occupation.",
+      "steps": [
+        { "key": "purpose" },
+        { "key": "occupation" },
+        { "key": "stay_length" },
+        { "key": "interests" }
+      ]
+    },
+    {
+      "id": "C",
+      "title": "Just Exploring Konnect",
+      "trigger": "purpose === 'just_exploring'",
+      "description": "User is browsing the app with no concrete trip plan. Minimal onboarding — jumps straight to interests.",
+      "steps": [
+        { "step": 1, "key": "purpose",   "question": "What brings you to Korea?",        "layout": "list" },
+        { "step": 2, "key": "interests", "question": "What would you like to explore?",  "layout": "list", "type": "multi" }
+      ],
+      "totalSteps": 2
+    },
+    {
+      "id": "D",
+      "title": "Planning Trip — Solo or With Partner",
+      "trigger": "purpose === 'planning_trip' AND traveling_with in ['solo', 'partner']",
+      "description": "User is planning to visit Korea alone or with their partner. Asks trip duration and which Korean destinations they want to visit.",
+      "steps": [
+        { "step": 1, "key": "purpose",        "question": "What brings you to Korea?",        "layout": "list" },
+        { "step": 2, "key": "traveling_with", "question": "Who are you traveling with?",      "layout": "list" },
+        { "step": 3, "key": "stay_length_de", "question": "How long is your stay in Korea?",  "layout": "pill" },
+        { "step": 4, "key": "destinations",   "question": "Where do you plan to go?",         "layout": "list", "type": "multi" },
+        { "step": 5, "key": "interests",      "question": "What would you like to explore?",  "layout": "list", "type": "multi" }
+      ],
+      "totalSteps": 5
+    },
+    {
+      "id": "E",
+      "title": "Planning Trip — Group (2+ People)",
+      "trigger": "purpose === 'planning_trip' AND traveling_with in ['family', 'friends', 'group']",
+      "description": "User is planning to visit Korea with family, friends, or a group tour. Asks group size, trip duration, and interests.",
+      "steps": [
+        { "step": 1, "key": "purpose",          "question": "What brings you to Korea?",                     "layout": "list" },
+        { "step": 2, "key": "traveling_with",   "question": "Who are you traveling with?",                   "layout": "list" },
+        { "step": 3, "key": "number_of_people", "question": "How many people are you traveling with?",       "layout": "counter", "note": "Stepper widget; answer stored as a number string e.g. '4'" },
+        { "step": 4, "key": "stay_length_de",   "question": "How long is your stay in Korea?",              "layout": "pill" },
+        { "step": 5, "key": "interests",        "question": "What would you like to explore?",               "layout": "list", "type": "multi" }
+      ],
+      "totalSteps": 5
+    }
+  ],
+
+  "questions": {
+    "purpose": {
+      "key": "purpose",
+      "prompt": "What brings you to Korea?",
+      "type": "single",
+      "layout": "list",
+      "usedInFlows": ["A", "B", "C", "D", "E"],
+      "options": [
+        { "id": "planning_trip",  "label": "I'm planning an upcoming trip", "iconAsset": "name_passport_4x", "routes_to": "D or E (after traveling_with)" },
+        { "id": "already_here",   "label": "I'm already in Korea",          "iconAsset": "name_korea_4x",   "routes_to": "A" },
+        { "id": "just_exploring", "label": "I'm just exploring Konnect",    "iconAsset": "name_konnect_4x", "routes_to": "C" }
+      ]
+    },
+    "occupation": {
+      "key": "occupation",
+      "prompt": "What best describes you?",
+      "type": "single",
+      "layout": "grid",
+      "usedInFlows": ["A", "B (legacy)"],
+      "options": [
+        { "id": "student",      "label": "Student",      "iconAsset": "name_student_4x" },
+        { "id": "employee",     "label": "Employee",     "iconAsset": "name_employee_4x" },
+        { "id": "teacher",      "label": "Teacher",      "iconAsset": "name_teacher_4x" },
+        { "id": "entrepreneur", "label": "Entrepreneur", "iconAsset": "name_entrepreneur_4x" },
+        { "id": "freelancer",   "label": "Freelancer",   "iconAsset": "name_freelancer_4x" },
+        { "id": "vacation",     "label": "Vacation",     "iconAsset": "name_vacation_4x", "note": "Inserts stay_length question in Flow A" }
+      ]
+    },
+    "stay_length": {
+      "key": "stay_length",
+      "prompt": "How long is your stay in Korea?",
+      "type": "single",
+      "layout": "pill",
+      "usedInFlows": ["A (when occupation=vacation)", "B (legacy)"],
+      "options": [
+        { "id": "few_days",     "label": "A few days" },
+        { "id": "about_a_week", "label": "About a week" },
+        { "id": "few_months",   "label": "A few months" },
+        { "id": "long_term",    "label": "Long term" }
+      ]
+    },
+    "traveling_with": {
+      "key": "traveling_with",
+      "prompt": "Who are you traveling with?",
+      "type": "single",
+      "layout": "list",
+      "usedInFlows": ["D", "E"],
+      "branchingLogic": "solo/partner → Flow D (destinations); family/friends/group → Flow E (number_of_people)",
+      "options": [
+        { "id": "solo",    "label": "Solo",    "iconAsset": "name_solo_4x",    "routes_to": "D" },
+        { "id": "partner", "label": "Partner", "iconAsset": "name_partner_4x", "routes_to": "D" },
+        { "id": "family",  "label": "Family",  "iconAsset": "name_home_4x",    "routes_to": "E" },
+        { "id": "friends", "label": "Friends", "iconAsset": "name_friend_4x",  "routes_to": "E" },
+        { "id": "group",   "label": "Group",   "iconAsset": "name_group_4x",   "routes_to": "E" }
+      ]
+    },
+    "number_of_people": {
+      "key": "number_of_people",
+      "prompt": "How many people are you traveling with?",
+      "type": "single",
+      "layout": "counter",
+      "usedInFlows": ["E"],
+      "minValue": 2,
+      "defaultValue": 2,
+      "note": "Rendered as a numeric stepper widget (not a standard option list). Answer stored as a numeric string e.g. '4'."
+    },
+    "stay_length_de": {
+      "key": "stay_length_de",
+      "prompt": "How long is your stay in Korea?",
+      "type": "single",
+      "layout": "pill",
+      "usedInFlows": ["D", "E"],
+      "note": "Different option labels from stay_length (used in Flows A/B)",
+      "options": [
+        { "id": "few_days",     "label": "Just a few days" },
+        { "id": "about_a_week", "label": "About a week" },
+        { "id": "few_weeks",    "label": "A few weeks" },
+        { "id": "long_term",    "label": "Long term" }
+      ]
+    },
+    "destinations": {
+      "key": "destinations",
+      "prompt": "Where do you plan to go?",
+      "type": "multi",
+      "layout": "list",
+      "usedInFlows": ["D"],
+      "helperText": "Multiple options allowed",
+      "options": [
+        { "id": "seoul",     "label": "Seoul",     "subtitle": "Never-ending Nightlife",   "iconAsset": "name_seoul_4x" },
+        { "id": "busan",     "label": "Busan",     "subtitle": "Beaches & Fresh Seafood",  "iconAsset": "name_busan_4x" },
+        { "id": "jeju",      "label": "Jeju",      "subtitle": "Black Pork & Tangerines",  "iconAsset": "name_jeju_4x" },
+        { "id": "gyeongju",  "label": "Gyeongju",  "subtitle": "Ancient Capital of Korea", "iconAsset": "name_gyeongju_4x" },
+        { "id": "incheon",   "label": "Incheon",   "subtitle": "Gateway to Korea",         "iconAsset": "name_incheon_4x" },
+        { "id": "suwon",     "label": "Suwon",     "subtitle": "Historic Fortress City",   "iconAsset": "name_suwon_4x" },
+        { "id": "gangneung", "label": "Gangneung", "subtitle": "Coffee & Surfing",         "iconAsset": "name_gangneung_4x" },
+        { "id": "yeosu",     "label": "Yeosu",     "subtitle": "Romantic Ocean Views",     "iconAsset": "name_yeosu_4x" },
+        { "id": "jeonju",    "label": "Jeonju",    "subtitle": "Bibimbap & Hanok",         "iconAsset": "name_jeonju_4x" },
+        { "id": "daegu",     "label": "Daegu",     "subtitle": "Hot Summers",              "iconAsset": "name_daegu_4x" }
+      ]
+    },
+    "interests": {
+      "key": "interests",
+      "prompt": "What would you like to explore?",
+      "type": "multi",
+      "layout": "list",
+      "usedInFlows": ["A", "B", "C", "D", "E"],
+      "helperText": "Multiple options allowed",
+      "options": [
+        { "id": "food_cafes",        "label": "Food & Cafes",       "iconAsset": "name_food_4x" },
+        { "id": "shopping",          "label": "Shopping",           "iconAsset": "name_shopping_4x" },
+        { "id": "culture_history",   "label": "Culture & history",  "iconAsset": "name_culture_4x" },
+        { "id": "nightlife",         "label": "Nightlife",          "iconAsset": "name_nightlife_4x" },
+        { "id": "nature",            "label": "Nature",             "iconAsset": "name_nature_4x" },
+        { "id": "social_networking", "label": "Social Networking",  "iconAsset": "name_socialnetworking_4x" }
+      ]
+    }
+  }
+}

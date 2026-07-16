@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase credential files (kept in android/app/ and ios/ which are gitignored above)
+/google-services.json
+/GoogleService-Info.plist
+
+# Release APKs — kept locally in release/, too large for git history
+/release/*.apk
