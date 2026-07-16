@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 532 482" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Bird Shadow" opacity="0.1" filter="url(#filter0_f_0_54)" style="mix-blend-mode:plus-lighter">
+<path d="M404 241C404 303.408 342.215 354 266 354C189.785 354 128 303.408 128 241C128 178.592 189.785 128 266 128C342.215 128 404 178.592 404 241Z" fill="var(--fill-0, white)"/>
+</g>
+<defs>
+<filter id="filter0_f_0_54" x="0" y="0" width="532" height="482" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="64" result="effect1_foregroundBlur_0_54"/>
+</filter>
+</defs>
+</svg>

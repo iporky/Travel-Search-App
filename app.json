@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "konnect-app",
+    "slug": "konnect-app",
+    "scheme": "konnect-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/onboarding/avatar_container.webp",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Konnect uses the microphone for voice search.",
+        "NSSpeechRecognitionUsageDescription": "Konnect converts your speech to text for search."
+      },
+      "bundleIdentifier": "com.chauhanshivang4.konnectapp"
+    },
+    "android": {
+      "package": "com.chauhanshivang4.konnectapp",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/onboarding/avatar_container.webp",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/onboarding/avatar_container.webp"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fbf1bda8-d8c4-48d8-b595-fbcfbac63af0"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/fbf1bda8-d8c4-48d8-b595-fbcfbac63af0",
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
+    "plugins": [
+      "expo-font",
+      "expo-web-browser",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.807036441227-v4e70u5e74lh3k14to566jfj09n02qd9"
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "expo-asset",
+      "expo-speech-recognition"
+    ]
+  }
+}
