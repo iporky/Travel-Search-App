@@ -13,7 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FLOW_A_QUESTIONS,
   FLOW_D_QUESTIONS,
@@ -27,6 +27,7 @@ import {
   submitOnboarding
 } from '../../api/onboarding';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { QuestionScreen } from './QuestionScreen';
@@ -59,6 +60,7 @@ interface Props {
 
 export function OnboardingFlow({ onComplete }: Props) {
   const { user } = useAuth();
+  const { language } = useLanguage();
   // 'intro' shows a brief "Let's get you set up" transition so the questions
   // don't appear abruptly right after sign-in.
   const [phase, setPhase] = useState<'intro' | 'questions' | 'welcome'>('intro');
@@ -82,7 +84,18 @@ export function OnboardingFlow({ onComplete }: Props) {
     });
   };
 
+  // Sync the answers-so-far to the backend. Fire-and-forget: the flow never
+  // blocks on it, and a failed sync just logs a warning.
+  const syncAnswers = (currentAnswers: Record<string, string[]>) => {
+    submitOnboarding({ answers: currentAnswers, preferredLanguage: language.code }).catch(
+      (e) => console.warn('[Onboarding] sync failed', e?.message ?? e),
+    );
+  };
+
   const handleConfirm = () => {
+    // Every Confirm press pushes the freshest partial profile to the backend.
+    syncAnswers(answers);
+
     // After purpose question, choose the branching flow.
     if (current.key === 'purpose') {
       const purposeId = answers['purpose']?.[0] ?? '';
@@ -120,22 +133,7 @@ export function OnboardingFlow({ onComplete }: Props) {
       return;
     }
 
-    // Last question — submit then show welcome
-    if (user) {
-      const payload = {
-        uid: user.id,
-        answers: Object.fromEntries(
-          [
-            ...questionList.map((q) => [
-              q.key,
-              q.type === 'multi' ? (answers[q.key] ?? []) : (answers[q.key]?.[0] ?? ''),
-            ]),
-          ],
-        ),
-        completedAt: new Date().toISOString(),
-      };
-      submitOnboarding(payload).catch((e) => console.warn('[Onboarding] submit failed', e));
-    }
+    // Last question — answers were already synced above; show welcome.
     setPhase('welcome');
   };
 
@@ -171,7 +169,9 @@ export function OnboardingFlow({ onComplete }: Props) {
         <CounterOverlay
           onClose={handleBack}
           onConfirm={(value) => {
-            setAnswers((prev) => ({ ...prev, [current.key]: [String(value)] }));
+            const next = { ...answers, [current.key]: [String(value)] };
+            setAnswers(next);
+            syncAnswers(next);
             if (step < total - 1) setStep((s) => s + 1);
             else setPhase('welcome');
           }}
@@ -289,12 +289,18 @@ function CounterOverlay({
 }) {
   const { t } = useTranslation();
   const [count, setCount] = useState(2);
+  // With edge-to-edge the modal window draws under the system navigation bar —
+  // pad the sheet so the Confirm button clears it.
+  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       {/* Backdrop tap = go back to the previous question */}
       <Pressable style={sheet.backdrop} onPress={onClose}>
-        <Pressable style={sheet.sheet} onPress={() => {}}>
+        <Pressable
+          style={[sheet.sheet, { paddingBottom: sy(28) + Math.max(insets.bottom, sy(12)) }]}
+          onPress={() => {}}
+        >
           <Text style={sheet.title}>{t('onboarding.numberOfPeople')}</Text>
           <View style={sheet.row}>
             <Pressable

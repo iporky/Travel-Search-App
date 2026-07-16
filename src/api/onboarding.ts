@@ -7,7 +7,9 @@
  *   Flow C (just_exploring)    -> purpose -> interests
  */
 
-import { mockDelay /*, request */ } from './client';
+import auth from '@react-native-firebase/auth';
+import DeviceInfo from 'react-native-device-info';
+import { AUTH_API_URL } from '../config';
 
 export type QuestionType = 'single' | 'multi';
 export type QuestionLayout = 'list' | 'grid' | 'pill' | 'counter';
@@ -207,30 +209,83 @@ export function getQuestionsForPurpose(purposeId: string): OnboardingQuestion[] 
   return FLOW_D_QUESTIONS;
 }
 
-// --- API payload types ---
+// --- API: live onboarding sync ---
+//
+//   POST {AUTH_API_URL}/api/v1/onboarding/?device_id=<device_id>
+//   headers: accept, Content-Type, Authorization: Bearer <firebase id token>
+//   body: { username, preferred_language, purpose,
+//           context: { travel_companion, duration, reason, ... },
+//           destinations, interests }
+//
+// Called after EVERY Confirm press in the flow with the answers so far, so
+// the backend always has the freshest partial profile.
 
-export interface OnboardingAnswers {
-  [key: string]: string | string[];
+export interface SubmitOnboardingArgs {
+  /** Accumulated question answers, keyed by question key. */
+  answers: Record<string, string[]>;
+  /** App language code (e.g. 'en'). */
+  preferredLanguage: string;
 }
 
-export interface SubmitOnboardingPayload {
-  uid: string;
-  answers: OnboardingAnswers;
-  completedAt: string;
-}
+// App option id → backend enum, where they differ.
+const PURPOSE_MAP: Record<string, string> = {
+  planning_trip: 'trip',
+  already_here: 'already_here',
+  just_exploring: 'exploring',
+};
 
-export interface SubmitOnboardingResult {
-  ok: boolean;
-}
+export async function submitOnboarding(args: SubmitOnboardingArgs): Promise<void> {
+  const fbUser = auth().currentUser;
+  if (!fbUser) throw new Error('submitOnboarding: no signed-in user');
 
-/**
- * Saves the user's onboarding answers. Currently mocked.
- */
-export async function submitOnboarding(
-  payload: SubmitOnboardingPayload,
-): Promise<SubmitOnboardingResult> {
-  console.log('[api] submitOnboarding -> POST /onboarding/answers', JSON.stringify(payload, null, 2));
-  await mockDelay();
-  console.log('[api] submitOnboarding OK for', payload.uid);
-  return { ok: true };
+  const [firebaseToken, deviceId] = await Promise.all([
+    fbUser.getIdToken(),
+    DeviceInfo.getUniqueId(),
+  ]);
+
+  const a = args.answers;
+  const context: Record<string, unknown> = {};
+  const companion = a['traveling_with']?.[0];
+  if (companion) context.travel_companion = companion;
+  const duration = a['stay_length']?.[0] ?? a['stay_length_de']?.[0];
+  if (duration) context.duration = duration;
+  const reason = a['occupation']?.[0];
+  if (reason) context.reason = reason;
+  const people = a['number_of_people']?.[0];
+  if (people) context.number_of_people = Number(people);
+
+  const purposeId = a['purpose']?.[0] ?? '';
+  const username = (fbUser.email?.split('@')[0] || fbUser.displayName || fbUser.uid)
+    .replace(/\s+/g, '_')
+    .toLowerCase();
+
+  const body = {
+    username,
+    preferred_language: args.preferredLanguage,
+    purpose: PURPOSE_MAP[purposeId] ?? purposeId,
+    context,
+    destinations: a['destinations'] ?? [],
+    interests: a['interests'] ?? [],
+  };
+
+  console.log('[api] submitOnboarding → POST /api/v1/onboarding/', JSON.stringify(body));
+
+  const res = await fetch(
+    `${AUTH_API_URL}/api/v1/onboarding/?device_id=${encodeURIComponent(deviceId)}`,
+    {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${firebaseToken}`,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`submitOnboarding failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  console.log('[api] submitOnboarding ✓');
 }
