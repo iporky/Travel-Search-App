@@ -34,7 +34,7 @@ const DESIGN_W = 375;
 const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
-const SEARCH_MIN_HEIGHT = sy(64);
+const SEARCH_MIN_HEIGHT = sy(78);
 const SEARCH_MAX_HEIGHT = sy(348);
 
 const LOGO = onboardingSource(
@@ -554,6 +554,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.18,
     textAlign: 'left',
     padding: 1,
+    includeFontPadding: false,
   },
   overlayComposerLeftBtn: {
     position: 'absolute',
@@ -599,5 +600,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     letterSpacing: -0.16,
     textAlign: 'center',
+    // Android clips the NationalPark glyphs' descenders without these.
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    paddingVertical: sy(16),
+    paddingHorizontal: sx(12),
   },
 });

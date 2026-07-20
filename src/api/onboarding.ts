@@ -7,9 +7,28 @@
  *   Flow C (just_exploring)    -> purpose -> interests
  */
 
-import auth from '@react-native-firebase/auth';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import DeviceInfo from 'react-native-device-info';
+import { Platform } from 'react-native';
 import { AUTH_API_URL } from '../config';
+import {
+  DESTINATION_FROM_BACKEND,
+  DESTINATION_TO_BACKEND,
+  DURATION_FROM_BACKEND,
+  DURATION_TO_BACKEND,
+  INTEREST_FROM_BACKEND,
+  INTEREST_TO_BACKEND,
+  PURPOSE_FROM_BACKEND,
+  PURPOSE_TO_BACKEND,
+  REASON_FROM_BACKEND,
+  REASON_TO_BACKEND,
+  TRAVEL_COMPANION_FROM_BACKEND,
+  TRAVEL_COMPANION_TO_BACKEND,
+  fromBackend,
+  listFromBackend,
+  listToBackend,
+  toBackend,
+} from './onboardingEnums';
 
 export type QuestionType = 'single' | 'multi';
 export type QuestionLayout = 'list' | 'grid' | 'pill' | 'counter';
@@ -211,14 +230,20 @@ export function getQuestionsForPurpose(purposeId: string): OnboardingQuestion[] 
 
 // --- API: live onboarding sync ---
 //
-//   POST {AUTH_API_URL}/api/v1/onboarding/?device_id=<device_id>
-//   headers: accept, Content-Type, Authorization: Bearer <firebase id token>
-//   body: { username, preferred_language, purpose,
-//           context: { travel_companion, duration, reason, ... },
-//           destinations, interests }
+// Lifecycle across the flow:
+//   • GET   {AUTH_API_URL}/api/v1/onboarding/{email}?device_id=<id>
+//           On flow start, check whether a record already exists for this
+//           email + device. If so, its selections are preloaded and every
+//           following write is a PATCH (no create).
+//   • POST  {AUTH_API_URL}/api/v1/onboarding/?device_id=<id>
+//           Fired ONCE, on the first screen's Confirm, to CREATE the record —
+//           only when no record existed for this email + device.
+//   • PATCH {AUTH_API_URL}/api/v1/onboarding/{email}?device_id=<id>
+//           Fired on every subsequent Confirm (and on the first screen too,
+//           when a record already existed) to update the partial profile.
 //
-// Called after EVERY Confirm press in the flow with the answers so far, so
-// the backend always has the freshest partial profile.
+// headers: accept, Authorization: Bearer <firebase id token>
+//          (+ Content-Type for POST/PATCH).
 
 export interface SubmitOnboardingArgs {
   /** Accumulated question answers, keyed by question key. */
@@ -227,65 +252,173 @@ export interface SubmitOnboardingArgs {
   preferredLanguage: string;
 }
 
-// App option id → backend enum, where they differ.
-const PURPOSE_MAP: Record<string, string> = {
-  planning_trip: 'trip',
-  already_here: 'already_here',
-  just_exploring: 'exploring',
-};
+/** Shape of the backend onboarding record (GET response / POST+PATCH body). */
+export interface OnboardingRecord {
+  purpose?: string;
+  context?: {
+    reason?: string;
+    travel_companion?: string;
+    group_size?: number;
+    duration?: string;
+  };
+  destinations?: string[];
+  interests?: string[];
+  preferred_language?: string;
+  username?: string;
+  platform?: string;
+}
 
-export async function submitOnboarding(args: SubmitOnboardingArgs): Promise<void> {
+// App option id ↔ backend enum translation lives in ./onboardingEnums.
+
+/** Resolve the signed-in user, a fresh Firebase ID token, and the device id. */
+async function onboardingAuthContext() {
   const fbUser = auth().currentUser;
-  if (!fbUser) throw new Error('submitOnboarding: no signed-in user');
-
+  if (!fbUser) throw new Error('onboarding: no signed-in user');
   const [firebaseToken, deviceId] = await Promise.all([
     fbUser.getIdToken(),
     DeviceInfo.getUniqueId(),
   ]);
+  return { fbUser, firebaseToken, deviceId, email: fbUser.email ?? '' };
+}
 
-  const a = args.answers;
+/** Build the request body (shared by POST create and PATCH update). */
+function buildOnboardingBody(
+  answers: Record<string, string[]>,
+  preferredLanguage: string,
+  fbUser: FirebaseAuthTypes.User,
+) {
+  const a = answers;
   const context: Record<string, unknown> = {};
-  const companion = a['traveling_with']?.[0];
-  if (companion) context.travel_companion = companion;
-  const duration = a['stay_length']?.[0] ?? a['stay_length_de']?.[0];
-  if (duration) context.duration = duration;
-  const reason = a['occupation']?.[0];
-  if (reason) context.reason = reason;
-  const people = a['number_of_people']?.[0];
-  if (people) context.number_of_people = Number(people);
 
-  const purposeId = a['purpose']?.[0] ?? '';
+  const companion = toBackend(TRAVEL_COMPANION_TO_BACKEND, a['traveling_with']?.[0]);
+  if (companion) context.travel_companion = companion;
+
+  // stay_length (Flow A/B) and stay_length_de (Flow D/E) both map to `duration`.
+  // Unmappable options (few_months, long_term) resolve to undefined → omitted.
+  const duration = toBackend(
+    DURATION_TO_BACKEND,
+    a['stay_length']?.[0] ?? a['stay_length_de']?.[0],
+  );
+  if (duration) context.duration = duration;
+
+  const reason = toBackend(REASON_TO_BACKEND, a['occupation']?.[0]);
+  if (reason) context.reason = reason;
+
+  const people = a['number_of_people']?.[0];
+  if (people) context.group_size = Number(people);
+
+  const purposeId = a['purpose']?.[0];
   const username = (fbUser.email?.split('@')[0] || fbUser.displayName || fbUser.uid)
     .replace(/\s+/g, '_')
     .toLowerCase();
 
-  const body = {
+  return {
     username,
-    preferred_language: args.preferredLanguage,
-    purpose: PURPOSE_MAP[purposeId] ?? purposeId,
+    preferred_language: preferredLanguage,
+    purpose: toBackend(PURPOSE_TO_BACKEND, purposeId) ?? purposeId ?? '',
     context,
-    destinations: a['destinations'] ?? [],
-    interests: a['interests'] ?? [],
+    destinations: listToBackend(DESTINATION_TO_BACKEND, a['destinations']),
+    interests: listToBackend(INTEREST_TO_BACKEND, a['interests']),
+    platform: Platform.OS,
   };
+}
 
-  console.log('[api] submitOnboarding → POST /api/v1/onboarding/', JSON.stringify(body));
+/**
+ * Fetch any existing onboarding record for the signed-in user's email +
+ * device. Returns null when none exists (HTTP 404) so the caller knows to
+ * CREATE via POST on the first Confirm rather than PATCH.
+ */
+export async function getOnboarding(): Promise<OnboardingRecord | null> {
+  const { firebaseToken, deviceId, email } = await onboardingAuthContext();
+  if (!email) return null;
 
-  const res = await fetch(
-    `${AUTH_API_URL}/api/v1/onboarding/?device_id=${encodeURIComponent(deviceId)}`,
-    {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${firebaseToken}`,
-      },
-      body: JSON.stringify(body),
+  const url = `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(email)}?device_id=${encodeURIComponent(deviceId)}`;
+  console.log('[api] getOnboarding → GET', url);
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      Authorization: `Bearer ${firebaseToken}`,
     },
-  );
+  });
+
+  if (res.status === 404) {
+    console.log('[api] getOnboarding — no existing record');
+    return null;
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`getOnboarding failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  const data = (await res.json().catch(() => null)) as OnboardingRecord | null;
+  console.log('[api] getOnboarding ✓', JSON.stringify(data));
+  return data;
+}
+
+/**
+ * Map a backend record into the flow's `answers` shape so previous selections
+ * can be preloaded when the user re-enters onboarding.
+ */
+export function recordToAnswers(rec: OnboardingRecord): Record<string, string[]> {
+  const answers: Record<string, string[]> = {};
+
+  const purposeId = fromBackend(PURPOSE_FROM_BACKEND, rec.purpose);
+  if (purposeId) answers.purpose = [purposeId];
+
+  const ctx = rec.context ?? {};
+  const reason = fromBackend(REASON_FROM_BACKEND, ctx.reason);
+  if (reason) answers.occupation = [reason];
+  const companion = fromBackend(TRAVEL_COMPANION_FROM_BACKEND, ctx.travel_companion);
+  if (companion) answers.traveling_with = [companion];
+  if (ctx.group_size != null) answers.number_of_people = [String(ctx.group_size)];
+
+  const duration = fromBackend(DURATION_FROM_BACKEND, ctx.duration);
+  if (duration) {
+    // Flow D (planning_trip) uses the stay_length_de variant; others stay_length.
+    const key = purposeId === 'planning_trip' ? 'stay_length_de' : 'stay_length';
+    answers[key] = [duration];
+  }
+
+  const destinations = listFromBackend(DESTINATION_FROM_BACKEND, rec.destinations);
+  if (destinations.length) answers.destinations = destinations;
+  const interests = listFromBackend(INTEREST_FROM_BACKEND, rec.interests);
+  if (interests.length) answers.interests = interests;
+
+  return answers;
+}
+
+/**
+ * Create (POST) or update (PATCH) the onboarding record.
+ *   • method 'POST'  → /api/v1/onboarding/?device_id=…         (create)
+ *   • method 'PATCH' → /api/v1/onboarding/{email}?device_id=…  (update)
+ */
+export async function saveOnboarding(
+  args: SubmitOnboardingArgs & { method: 'POST' | 'PATCH' },
+): Promise<void> {
+  const { fbUser, firebaseToken, deviceId, email } = await onboardingAuthContext();
+  const body = buildOnboardingBody(args.answers, args.preferredLanguage, fbUser);
+
+  const url =
+    args.method === 'POST'
+      ? `${AUTH_API_URL}/api/v1/onboarding/?device_id=${encodeURIComponent(deviceId)}`
+      : `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(email)}?device_id=${encodeURIComponent(deviceId)}`;
+
+  console.log(`[api] saveOnboarding → ${args.method} ${url}`, JSON.stringify(body));
+
+  const res = await fetch(url, {
+    method: args.method,
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${firebaseToken}`,
+    },
+    body: JSON.stringify(body),
+  });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`submitOnboarding failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+    throw new Error(`saveOnboarding(${args.method}) failed: HTTP ${res.status} ${text.slice(0, 200)}`);
   }
-  console.log('[api] submitOnboarding ✓');
+  console.log(`[api] saveOnboarding(${args.method}) ✓`);
 }

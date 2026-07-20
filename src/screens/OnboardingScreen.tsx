@@ -7,12 +7,15 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   ViewToken,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
+import { useLanguage } from '../context/LanguageContext';
 import { SplashWelcome1 } from './onboarding/SplashWelcome1';
 import { SplashWelcome2 } from './onboarding/SplashWelcome2';
 import { SplashWelcome3 } from './onboarding/SplashWelcome3';
@@ -121,6 +124,14 @@ interface Props {
 
 export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) {
   const SIGNIN_SLIDE = SLIDES.length - 1; // index 4
+  const insets = useSafeAreaInsets();
+  const { language } = useLanguage();
+  // Region code prefix for the language button, e.g. ko-KR → "KR", ja-JP → "JP".
+  const langPrefix = (language.voiceLocale.split('-')[1] || language.code).toUpperCase();
+  // Size each page from the live full window so the background image always fills
+  // the whole screen (no bottom gap, no half-covered look). Captured live via the
+  // hook so it's correct after edge-to-edge settles.
+  const { width: winW, height: winH } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(initialSignInIndex ? SIGNIN_SLIDE : 0);
   const [showLanguage, setShowLanguage] = useState(false);
   const activeIndexRef = useRef(activeIndex);
@@ -154,14 +165,16 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
     ({ item }: { item: Slide }) => {
       // Memoized slides: `activeIndex` is passed as the slide's own index so the
       // prop stays constant — only the `active` boolean flip triggers a re-render.
-      if (item.id === '1') return <MemoSplash1 activeIndex={0} active={activeIndex === 0} onPress={goNext} />;
-      if (item.id === '2') return <MemoSplash2 activeIndex={1} active={activeIndex === 1} onPress={goNext} />;
-      if (item.id === '3') return <MemoSplash3 activeIndex={2} active={activeIndex === 2} onPress={goNext} />;
-      if (item.id === '4') return <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={goNext} />;
-      if (item.id === '5') return <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={goNext} />;
-      return null;
+      let slide: React.ReactNode = null;
+      if (item.id === '1') slide = <MemoSplash1 activeIndex={0} active={activeIndex === 0} onPress={goNext} />;
+      else if (item.id === '2') slide = <MemoSplash2 activeIndex={1} active={activeIndex === 1} onPress={goNext} />;
+      else if (item.id === '3') slide = <MemoSplash3 activeIndex={2} active={activeIndex === 2} onPress={goNext} />;
+      else if (item.id === '4') slide = <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={goNext} />;
+      else if (item.id === '5') slide = <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={goNext} />;
+      // Each page fills the full window → background image covers the whole screen.
+      return <View style={{ width: winW, height: winH }}>{slide}</View>;
     },
-    [activeIndex, goNext],
+    [activeIndex, goNext, winW, winH],
   );
   return (
     <View style={styles.container}>
@@ -175,7 +188,7 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         showsHorizontalScrollIndicator={false}
         onViewableItemsChanged={handleViewableChange}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-        getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
+        getItemLayout={(_, index) => ({ length: winW, offset: winW * index, index })}
         initialScrollIndex={initialSignInIndex ? SIGNIN_SLIDE : 0}
         // Pre-mount every slide so swipes never hit a blank page and the
         // scroll runs entirely on the native thread — butter smooth.
@@ -191,12 +204,16 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
 
       {/* Language selector — visible on every splash page */}
       <Pressable onPress={() => setShowLanguage(true)} style={styles.languageBtn} hitSlop={8}>
-        <Ionicons name="globe-outline" size={sx(20)} color="#1d192b" />
+        <Ionicons name="globe-outline" size={sx(18)} color={colors.gray[900]} />
+        <Text style={styles.languageCode}>{langPrefix}</Text>
       </Pressable>
 
-      {/* Stationary pagination dots — fixed above the Get started button */}
+      {/* Stationary pagination dots — fixed above the Get started text */}
       {activeIndex < SIGNIN_SLIDE ? (
-        <View style={styles.fixedDotsRow} pointerEvents="none">
+        <View
+          style={[styles.fixedDotsRow, { bottom: insets.bottom + sy(64) }]}
+          pointerEvents="none"
+        >
           {SLIDES.map((s, i) => (
             <View
               key={s.id}
@@ -207,7 +224,11 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
       ) : null}
 
       {activeIndex < SIGNIN_SLIDE ? (
-        <Pressable onPress={goToSignIn} style={styles.globalGetStartedBtn}>
+        <Pressable
+          onPress={goToSignIn}
+          style={[styles.globalGetStartedBtn, { bottom: insets.bottom + sy(20) }]}
+          hitSlop={12}
+        >
           <Text style={styles.globalGetStartedText}>Get started</Text>
         </Pressable>
       ) : null}
@@ -225,12 +246,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: sy(58),
     right: sx(20),
-    width: sx(36),
-    height: sx(36),
-    borderRadius: 999,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: sx(4),
+    height: sx(32),
+    paddingHorizontal: sx(6),
+    borderRadius: 999,
     zIndex: 30,
+  },
+  languageCode: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(13),
+    color: colors.gray[900],
+    letterSpacing: 0.3,
   },
   bottomContent: {
     position: 'absolute',
@@ -274,7 +302,6 @@ const styles = StyleSheet.create({
   },
   fixedDotsRow: {
     position: 'absolute',
-    bottom: sy(140),
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -295,24 +322,20 @@ const styles = StyleSheet.create({
   },
   globalGetStartedBtn: {
     position: 'absolute',
-    bottom: sy(84),
-    minHeight: sy(37),
-    minWidth: sx(120),
-    maxWidth: '85%',
+    left: 0,
+    right: 0,
     alignSelf: 'center',
-    borderRadius: 999,
-    backgroundColor: '#527dff',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: sx(20),
     paddingVertical: sy(8),
     zIndex: 20,
   },
   globalGetStartedText: {
-    fontFamily: 'NationalPark_600SemiBold',
+    fontFamily: 'NationalPark_500Medium',
     fontSize: sx(16),
-    color: '#f2f9ff',
-    letterSpacing: sx(-0.16),
-    lineHeight: sy(16),
+    color: colors.gray[900],
+    textAlign: 'center',
+    letterSpacing: -0.16,
+    lineHeight: sy(24),
   },
 });

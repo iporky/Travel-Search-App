@@ -20,6 +20,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
+const BG     = onboardingSource(require('../../../assets/onboarding/bg-screen3.png') as ImageSourcePropType, 'bg-screen3');
 const LOGO   = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const BIRD1  = onboardingSource(require('../../../assets/mascot/bird-buzz-1.png') as ImageSourcePropType, 'bird-buzz-1');
 const BIRD2  = onboardingSource(require('../../../assets/mascot/bird-buzz-2.png') as ImageSourcePropType, 'bird-buzz-2');
@@ -86,12 +87,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      <LinearGradient
-        colors={['#d0e8ff', '#f3f6fe']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
       {/* ── Speech bubbles (rendered before birds so birds appear on top) ── */}
 
@@ -185,7 +181,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: W, height: H, overflow: 'hidden', backgroundColor: '#f3f6fe' },
+  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#f3f6fe' },
   bubbleOuter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   bubble: {
     width: '100%',

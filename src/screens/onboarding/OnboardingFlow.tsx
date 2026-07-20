@@ -24,7 +24,9 @@ import {
   PURPOSE_QUESTION,
   STAY_LENGTH_QUESTION,
   getQuestionsForPurpose,
-  submitOnboarding
+  getOnboarding,
+  recordToAnswers,
+  saveOnboarding,
 } from '../../api/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -69,8 +71,33 @@ export function OnboardingFlow({ onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
 
+  // Tracks whether a backend record already exists for this email + device.
+  // Decides POST (create, first Confirm only) vs PATCH (every other Confirm).
+  const hasRecordRef = useRef(false);
+  // Serializes writes so a PATCH can never race ahead of the initial POST.
+  const syncChainRef = useRef<Promise<unknown>>(Promise.resolve());
+
   const total = questionList.length;
   const current = questionList[step];
+
+  // On flow start, load any existing record and preload its selections. If one
+  // exists, all writes become PATCH (the record is already created).
+  useEffect(() => {
+    let cancelled = false;
+    getOnboarding()
+      .then((record) => {
+        if (cancelled || !record) return;
+        hasRecordRef.current = true;
+        const preloaded = recordToAnswers(record);
+        setAnswers(preloaded);
+        const purposeId = preloaded['purpose']?.[0];
+        if (purposeId) setQuestionList(getQuestionsForPurpose(purposeId));
+      })
+      .catch((e) => console.warn('[Onboarding] get failed', e?.message ?? e));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleOption = (optionId: string) => {
     if (!current) return;
@@ -86,10 +113,20 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   // Sync the answers-so-far to the backend. Fire-and-forget: the flow never
   // blocks on it, and a failed sync just logs a warning.
+  //
+  // The very first Confirm with no existing record CREATEs it (POST); every
+  // subsequent Confirm — and the first one too when a record was preloaded —
+  // UPDATEs it (PATCH). Writes are chained so a PATCH can't outrun the POST.
   const syncAnswers = (currentAnswers: Record<string, string[]>) => {
-    submitOnboarding({ answers: currentAnswers, preferredLanguage: language.code }).catch(
-      (e) => console.warn('[Onboarding] sync failed', e?.message ?? e),
-    );
+    const method = hasRecordRef.current ? 'PATCH' : 'POST';
+    // Mark as existing immediately so the next Confirm PATCHes even if this
+    // POST is still in flight (the chain guarantees ordering on the wire).
+    hasRecordRef.current = true;
+    syncChainRef.current = syncChainRef.current
+      .then(() =>
+        saveOnboarding({ answers: currentAnswers, preferredLanguage: language.code, method }),
+      )
+      .catch((e) => console.warn('[Onboarding] sync failed', e?.message ?? e));
   };
 
   const handleConfirm = () => {
@@ -360,17 +397,23 @@ const sheet = StyleSheet.create({
     justifyContent: 'center',
   },
   stepBtnText: {
-    fontFamily: 'NationalPark_500Medium',
+    // Lighter weight so the bold value reads as the primary element.
+    fontFamily: 'NationalPark_400Regular',
     fontSize: sx(24),
     color: '#8ca0b7',
     lineHeight: sx(28),
   },
   value: {
     fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(44),
+    fontSize: sx(56),
+    // lineHeight == fontSize + no font padding → the digits sit vertically
+    // centred with the +/- circles instead of dropping below the baseline.
+    lineHeight: sx(56),
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     color: '#1d192b',
-    letterSpacing: -0.88,
-    minWidth: sx(84),
+    letterSpacing: -1,
+    minWidth: sx(96),
     textAlign: 'center',
   },
   cta: {

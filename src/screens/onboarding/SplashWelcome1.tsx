@@ -21,6 +21,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
+const BG         = onboardingSource(require('../../../assets/onboarding/bg-screen1.png') as ImageSourcePropType, 'bg-screen1');
 const LOGO       = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const BIRD_LEFT  = onboardingSource(require('../../../assets/mascot/bird-bg-left.png') as ImageSourcePropType, 'bird-bg-left');
 const BIRD_RIGHT = onboardingSource(require('../../../assets/mascot/bird-bg-right.png') as ImageSourcePropType, 'bird-bg-right');
@@ -91,12 +92,7 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
 
   return (
     <Pressable onPress={onPress} style={styles.root}>
-      <LinearGradient
-        colors={['#c9e3ff', '#eaefff']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
       {/* Background bird — left */}
       <Animated.Image
@@ -160,7 +156,7 @@ export function SplashWelcome1({ activeIndex, onPress, active = true }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: W, height: H, overflow: 'hidden', backgroundColor: '#eaf4ff' },
+  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#eaf4ff' },
   bottomContent: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: sy(21) },
   textBlock: { alignItems: 'center', gap: sy(12) },
   titleRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' },

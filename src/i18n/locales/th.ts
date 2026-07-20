@@ -107,7 +107,7 @@ const th = {
     welcomeTitle: 'ยินดีต้อนรับ! {{name}}',
     welcomeSubtitle: 'บัญชีของคุณพร้อมแล้ว',
     letsKonnect: 'มา Konnect กันเถอะ!',
-    setupTitle: 'มาเริ่มตั้งค่ากันเถอะ',
+    setupTitle: 'มาปรับแต่งประสบการณ์การเดินทางของคุณกันเถอะ',
     setupSubtitle: 'คำถามสั้น ๆ เพื่อปรับประสบการณ์ให้เหมาะกับคุณ',
   },
 };

@@ -107,7 +107,7 @@ const vi = {
     welcomeTitle: 'Chào mừng! {{name}}',
     welcomeSubtitle: 'Tài khoản của bạn đã sẵn sàng',
     letsKonnect: 'Cùng Konnect nào!',
-    setupTitle: 'Hãy bắt đầu thiết lập',
+    setupTitle: 'Hãy cá nhân hóa trải nghiệm du lịch của bạn',
     setupSubtitle: 'Vài câu hỏi nhanh để cá nhân hóa trải nghiệm của bạn',
   },
 };

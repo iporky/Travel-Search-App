@@ -29,6 +29,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
+const BG            = onboardingSource(require('../../../assets/onboarding/bg-signin.png') as ImageSourcePropType, 'bg-signin');
 const LOGO          = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const BIRD          = onboardingSource(require('../../../assets/mascot/bird-signin.png') as ImageSourcePropType, 'bird-signin');
 const ICON_APPLE    = onboardingSource(require('../../../assets/auth/apple.png') as ImageSourcePropType, 'apple');
@@ -148,12 +149,7 @@ export function SignIn({ onPress, active }: Props) {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#e0eeff', '#eef5ff']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
 
       {/* Logo */}
@@ -201,18 +197,21 @@ export function SignIn({ onPress, active }: Props) {
           </Animated.View>
         </View>
 
-        {/* Terms */}
-        <Animated.Text style={[styles.terms, { opacity: fadeAnim }]}>
-          {'By creating an account, you agree to our\n'}
-          <Text style={styles.termsLink} onPress={() => setPolicy('terms')}>
-            Terms of Use
-          </Text>
-          {' and '}
-          <Text style={styles.termsLink} onPress={() => setPolicy('privacy')}>
-            Privacy Policy
-          </Text>
-          .
-        </Animated.Text>
+        {/* Terms — links are full Pressables with hitSlop so the whole word is
+            an easy tap target (not just the center of the text). */}
+        <Animated.View style={[styles.termsWrap, { opacity: fadeAnim }]}>
+          <Text style={styles.terms}>By creating an account, you agree to our</Text>
+          <View style={styles.termsLinksRow}>
+            <Pressable onPress={() => setPolicy('terms')} hitSlop={12}>
+              <Text style={[styles.terms, styles.termsLink]}>Terms of Use</Text>
+            </Pressable>
+            <Text style={styles.terms}> and </Text>
+            <Pressable onPress={() => setPolicy('privacy')} hitSlop={12}>
+              <Text style={[styles.terms, styles.termsLink]}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={styles.terms}>.</Text>
+          </View>
+        </Animated.View>
       </View>
 
       {/* Full-screen loader while the provider sign-in + Firebase exchange runs.
@@ -240,9 +239,11 @@ export function SignIn({ onPress, active }: Props) {
         animationType="fade"
         onRequestClose={() => setPolicy(null)}
       >
-        <Pressable style={styles.policyBackdrop} onPress={() => setPolicy(null)}>
-          {/* Stop backdrop press from closing when tapping the card itself */}
-          <Pressable style={styles.policyCard} onPress={() => {}}>
+        {/* Backdrop is its own layer BEHIND the card — the card is a plain View,
+            so the ScrollView has no Pressable ancestor stealing the drag. */}
+        <View style={styles.policyRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPolicy(null)} />
+          <View style={styles.policyCard}>
             <View style={styles.policyHeader}>
               <Text style={styles.policyTitle}>{policy ? POLICY_TEXT[policy].title : ''}</Text>
               <Pressable onPress={() => setPolicy(null)} hitSlop={12} style={styles.policyCloseBtn}>
@@ -253,18 +254,19 @@ export function SignIn({ onPress, active }: Props) {
               style={styles.policyScroll}
               contentContainerStyle={styles.policyScrollContent}
               showsVerticalScrollIndicator
+              nestedScrollEnabled
             >
               <Text style={styles.policyBody}>{policy ? POLICY_TEXT[policy].body : ''}</Text>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { width: W, height: H, overflow: 'hidden', backgroundColor: '#eaf4ff' },
+  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#eaf4ff' },
   cloudBottom: {
     position: 'absolute',
     left: 0,
@@ -363,6 +365,15 @@ const styles = StyleSheet.create({
     height: sx(40),
     borderRadius: sx(99),
   },
+  termsWrap: {
+    alignItems: 'center',
+  },
+  termsLinksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   terms: {
     fontFamily: 'NationalPark_400Regular',
     fontSize: sx(12),
@@ -400,7 +411,7 @@ const styles = StyleSheet.create({
     color: '#3a4657',
     letterSpacing: -0.15,
   },
-  policyBackdrop: {
+  policyRoot: {
     flex: 1,
     backgroundColor: 'rgba(17, 26, 96, 0.35)',
     alignItems: 'center',

@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[1],
     gap: spacing[1],
-    minHeight: 56,
+    minHeight: 68,
   },
   default: { ...shadows.inputDefault },
   focused: {
@@ -127,8 +127,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: colors.text.primary,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[3],
+    // Prevent Android from clipping glyph descenders in the single-line input.
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   inputMultiline: { maxHeight: 120, paddingTop: spacing[3] },
   iconButton: {

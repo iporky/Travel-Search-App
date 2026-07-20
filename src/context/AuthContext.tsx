@@ -48,9 +48,9 @@ FBSettings.initializeSDK();
 // Web client (type 3) from google-services.json — required by Firebase to mint
 // a verifiable Google idToken.
 const WEB_CLIENT_ID =
-  '807036441227-7938pn6plqhbn6nh3lq6iqj8h88vl5nq.apps.googleusercontent.com';
+  '814154492607-btob4c9rrapk1thod6goccu7a7qqd37q.apps.googleusercontent.com';
 const IOS_CLIENT_ID =
-  '807036441227-v4e70u5e74lh3k14to566jfj09n02qd9.apps.googleusercontent.com';
+  '814154492607-hm4ookbdmmu9uhustj477bktal2e69jt.apps.googleusercontent.com';
 
 // Configure once at module load (before any component renders)
 GoogleSignin.configure({

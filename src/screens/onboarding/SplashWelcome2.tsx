@@ -20,6 +20,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
+const BG             = onboardingSource(require('../../../assets/onboarding/bg-screen2.png') as ImageSourcePropType, 'bg-screen2');
 const LOGO           = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const BIRD           = onboardingSource(require('../../../assets/mascot/bird-screen2.png') as ImageSourcePropType, 'bird-screen2');
 const ICON_PASSPORT  = onboardingSource(require('../../../assets/services/icon-passport.png') as ImageSourcePropType, 'icon-passport');
@@ -141,12 +142,7 @@ export function SplashWelcome2({ activeIndex, onPress, active }: Props) {
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      <LinearGradient
-        colors={['#e2defb', '#f3f2fd']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
       <IconBubble icon={ICON_PASSPORT}  left={sx(56)}  top={sy(122)} size={sx(51)}  rotate="-10.53deg" opacity={0.6} float={f1} entrance={e1} imgW={sx(44)} imgH={sy(51)} />
       <IconBubble icon={ICON_FOOD}      left={sx(248)} top={sy(125)} size={sx(62)}  rotate="24.46deg"  opacity={0.7} float={f2} entrance={e2} imgW={sx(62)} imgH={sy(58)} />
@@ -181,7 +177,7 @@ export function SplashWelcome2({ activeIndex, onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: W, height: H, overflow: 'hidden', backgroundColor: '#f3f2fd' },
+  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#f3f2fd' },
   bubble: { backgroundColor: 'rgba(255,255,255,0.58)', borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   contentContainer: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: sy(21) },
   textBlock: { alignItems: 'center', gap: sy(12) },

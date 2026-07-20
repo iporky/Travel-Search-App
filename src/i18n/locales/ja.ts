@@ -107,7 +107,7 @@ const ja = {
     welcomeTitle: 'ようこそ！{{name}}さん',
     welcomeSubtitle: 'アカウントの準備ができました',
     letsKonnect: 'Konnectを始めよう！',
-    setupTitle: 'セットアップを始めましょう',
+    setupTitle: '旅の体験をパーソナライズしましょう',
     setupSubtitle: 'いくつかの質問であなたに合わせてカスタマイズします',
   },
 };

@@ -128,7 +128,7 @@ export function QuestionScreen({
           style={styles.progressTrack}
           onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
         >
-          <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} />
+          <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} width={trackWidth} />
           <View style={[styles.planeWrap, { left: pct }]} pointerEvents="none">
             <View style={styles.planeGlow}>
               <Image source={PLANE} style={styles.planeImg} />
@@ -141,7 +141,6 @@ export function QuestionScreen({
       <View style={styles.bubbleRow}>
         <Image source={BIRD_AVATAR} style={styles.birdAvatar} resizeMode="contain" />
         <View style={styles.bubble}>
-          <View style={styles.bubbleTail} />
           <Text style={styles.bubbleText}>{question.prompt}</Text>
         </View>
       </View>
@@ -426,15 +425,15 @@ const styles = StyleSheet.create({
   planeWrap: {
     position: 'absolute',
     zIndex: 4,
-    elevation: 10,
   },
   planeGlow: {
-    // Blue halo glow matching the Figma shadow/plane token
+    // Blue halo glow (iOS only). On Android `elevation` is intentionally omitted:
+    // it casts a rectangular shadow around the image bounds, which looked like a
+    // box behind the plane. zIndex alone keeps the plane above the dashes.
     shadowColor: '#527dff',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.55,
     shadowRadius: 10,
-    elevation: 8,
   },
   planeImg: {
     width: sx(36),
@@ -453,25 +452,17 @@ const styles = StyleSheet.create({
   },
   birdAvatar: { width: sx(56), height: sx(56) },
   bubble: {
-    flex: 1,
+    // Hug the text: shrink to content, wrap only when it would exceed the row.
+    flexShrink: 1,
+    alignSelf: 'flex-start',
     backgroundColor: colors.blue[500],
-    borderRadius: sx(20),
-    borderBottomLeftRadius: sx(20),
+    // Triangle tail removed, but keep the squared bottom-left corner.
+    borderTopLeftRadius: sx(20),
+    borderTopRightRadius: sx(20),
+    borderBottomRightRadius: sx(20),
+    borderBottomLeftRadius: sx(4),
     paddingHorizontal: sx(16),
     paddingVertical: sy(12),
-  },
-  bubbleTail: {
-    position: 'absolute',
-    left: -sx(6),
-    bottom: sy(12),
-    width: 0,
-    height: 0,
-    borderTopWidth: sx(8),
-    borderTopColor: 'transparent',
-    borderRightWidth: sx(9),
-    borderRightColor: colors.blue[500],
-    borderBottomWidth: sx(2),
-    borderBottomColor: 'transparent',
   },
   bubbleText: {
     fontFamily: 'NationalPark_500Medium',

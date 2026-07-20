@@ -107,7 +107,7 @@ const ko = {
     welcomeTitle: '{{name}}님, 환영해요!',
     welcomeSubtitle: '계정 준비가 완료되었습니다',
     letsKonnect: '코넥트 시작하기!',
-    setupTitle: '설정을 시작해 볼게요',
+    setupTitle: '여행 경험을 맞춤 설정해 볼게요',
     setupSubtitle: '몇 가지 질문으로 맞춤 설정해 드릴게요',
   },
 };

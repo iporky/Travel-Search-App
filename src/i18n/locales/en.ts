@@ -107,7 +107,7 @@ const en = {
     welcomeTitle: 'Welcome! {{name}}',
     welcomeSubtitle: 'Your account is ready',
     letsKonnect: "Let's Konnect!",
-    setupTitle: "Let's get you set up",
+    setupTitle: "Let's personalize your travel experience",
     setupSubtitle: 'A few quick questions to personalize your experience',
   },
 };

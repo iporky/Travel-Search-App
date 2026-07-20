@@ -107,7 +107,7 @@ const zhTW = {
     welcomeTitle: '歡迎！{{name}}',
     welcomeSubtitle: '你的帳戶已就緒',
     letsKonnect: '開始 Konnect 吧！',
-    setupTitle: '讓我們開始設定吧',
+    setupTitle: '讓我們為你打造專屬旅遊體驗',
     setupSubtitle: '幾個小問題，為您打造專屬體驗',
   },
 };

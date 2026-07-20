@@ -20,6 +20,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
+const BG        = onboardingSource(require('../../../assets/onboarding/bg-screen4.png') as ImageSourcePropType, 'bg-screen4');
 const LOGO      = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const BIRD_CARD = onboardingSource(require('../../../assets/mascot/bird-card.png') as ImageSourcePropType, 'bird-card');
 
@@ -58,12 +59,7 @@ export function SplashWelcome4({ onPress, active }: Props) {
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      <LinearGradient
-        colors={['#f5f7ff', '#e3f4fb']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
       {/* Hero bird with card — jumps up from ATM area */}
       <Animated.View
@@ -101,7 +97,7 @@ export function SplashWelcome4({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: W, height: H, overflow: 'hidden', backgroundColor: '#e3f4fb' },
+  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#e3f4fb' },
   contentContainer: {
     position: 'absolute',
     left: 0,

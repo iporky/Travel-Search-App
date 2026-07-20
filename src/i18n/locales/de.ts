@@ -107,7 +107,7 @@ const de = {
     welcomeTitle: 'Willkommen! {{name}}',
     welcomeSubtitle: 'Dein Konto ist bereit',
     letsKonnect: 'Los geht\'s mit Konnect!',
-    setupTitle: 'Lass uns loslegen',
+    setupTitle: 'Personalisieren wir dein Reiseerlebnis',
     setupSubtitle: 'Ein paar kurze Fragen, um dein Erlebnis zu personalisieren',
   },
 };

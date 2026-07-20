@@ -107,7 +107,7 @@ const fr = {
     welcomeTitle: 'Bienvenue ! {{name}}',
     welcomeSubtitle: 'Votre compte est prêt',
     letsKonnect: 'Konnectons-nous !',
-    setupTitle: 'Configurons votre compte',
+    setupTitle: 'Personnalisons votre expérience de voyage',
     setupSubtitle: 'Quelques questions rapides pour personnaliser votre expérience',
   },
 };
