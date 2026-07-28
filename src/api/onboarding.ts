@@ -278,7 +278,9 @@ async function onboardingAuthContext() {
     fbUser.getIdToken(),
     DeviceInfo.getUniqueId(),
   ]);
-  return { fbUser, firebaseToken, deviceId, email: fbUser.email ?? '' };
+  // Identify the record by the Firebase uid (stable; Facebook may return no
+  // email). email is kept only for optional payload use.
+  return { fbUser, firebaseToken, deviceId, uid: fbUser.uid, email: fbUser.email ?? '' };
 }
 
 /** Build the request body (shared by POST create and PATCH update). */
@@ -324,15 +326,14 @@ function buildOnboardingBody(
 }
 
 /**
- * Fetch any existing onboarding record for the signed-in user's email +
+ * Fetch any existing onboarding record for the signed-in user's Firebase uid +
  * device. Returns null when none exists (HTTP 404) so the caller knows to
  * CREATE via POST on the first Confirm rather than PATCH.
  */
 export async function getOnboarding(): Promise<OnboardingRecord | null> {
-  const { firebaseToken, deviceId, email } = await onboardingAuthContext();
-  if (!email) return null;
+  const { firebaseToken, deviceId, uid } = await onboardingAuthContext();
 
-  const url = `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(email)}?device_id=${encodeURIComponent(deviceId)}`;
+  const url = `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(uid)}?device_id=${encodeURIComponent(deviceId)}`;
   console.log('[api] getOnboarding → GET', url);
 
   const res = await fetch(url, {
@@ -396,13 +397,13 @@ export function recordToAnswers(rec: OnboardingRecord): Record<string, string[]>
 export async function saveOnboarding(
   args: SubmitOnboardingArgs & { method: 'POST' | 'PATCH' },
 ): Promise<void> {
-  const { fbUser, firebaseToken, deviceId, email } = await onboardingAuthContext();
+  const { fbUser, firebaseToken, deviceId, uid } = await onboardingAuthContext();
   const body = buildOnboardingBody(args.answers, args.preferredLanguage, fbUser);
 
   const url =
     args.method === 'POST'
       ? `${AUTH_API_URL}/api/v1/onboarding/?device_id=${encodeURIComponent(deviceId)}`
-      : `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(email)}?device_id=${encodeURIComponent(deviceId)}`;
+      : `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(uid)}?device_id=${encodeURIComponent(deviceId)}`;
 
   console.log(`[api] saveOnboarding → ${args.method} ${url}`, JSON.stringify(body));
 

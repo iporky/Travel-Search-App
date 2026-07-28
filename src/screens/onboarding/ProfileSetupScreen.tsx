@@ -1,18 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
   ImageSourcePropType,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { KeyboardStickyView } from '../../components/KeyboardStickyView';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, radius } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
+import ProgressBar from '../../components/ProgressBar';
+
+// airplane.png is a freshly-added PNG — on Android load it by resource name
+// (require()'s numeric id renders blank), keeping the require() so Metro bundles it.
+const PLANE_MOD = require('../../../assets/onboarding/airplane.png') as ImageSourcePropType;
+const PLANE: ImageSourcePropType =
+  Platform.OS === 'android' ? { uri: 'assets_onboarding_airplane' } : PLANE_MOD;
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -39,9 +52,11 @@ type Availability = 'idle' | 'checking' | 'available' | 'taken';
 interface Props {
   progress: number;
   onBack: () => void;
-  onConfirm: (username: string) => void;
+  onConfirm: (username: string, photoUri?: string | null) => void;
   initialValue?: string;
   initialPhotoUrl?: string | null;
+  /** Reuse this screen from Profile as an editor: no progress bar, "Save" CTA. */
+  editMode?: boolean;
 }
 
 function sanitizeUsername(value: string): string {
@@ -76,11 +91,71 @@ export function ProfileSetupScreen({
   onConfirm,
   initialValue = '',
   initialPhotoUrl,
+  editMode = false,
 }: Props) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState(initialValue);
   const [availability, setAvailability] = useState<Availability>('idle');
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [photoFailed, setPhotoFailed] = useState(false);
+  // A photo the user picked/took on this screen (overrides the provider photo).
+  const [pickedPhoto, setPickedPhoto] = useState<string | null>(null);
   const requestSeq = useRef(0);
+
+  const launchPicker = async (mode: 'camera' | 'library') => {
+    try {
+      const result =
+        mode === 'camera'
+          ? await (async () => {
+              const perm = await ImagePicker.requestCameraPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('onboarding.cameraNeededTitle'), t('onboarding.cameraNeededBody'));
+                return null;
+              }
+              return ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.85,
+              });
+            })()
+          : await (async () => {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('onboarding.photosNeededTitle'), t('onboarding.photosNeededBody'));
+                return null;
+              }
+              return ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.85,
+              });
+            })();
+
+      if (result && !result.canceled && result.assets?.[0]?.uri) {
+        setPickedPhoto(result.assets[0].uri);
+        setPhotoFailed(false);
+      }
+    } catch (e) {
+      Alert.alert(t('onboarding.photoFailedTitle'), t('onboarding.photoFailedBody'));
+    }
+  };
+
+  const choosePhoto = () => {
+    Alert.alert(t('onboarding.photoSheetTitle'), undefined, [
+      { text: t('onboarding.takePhoto'), onPress: () => launchPicker('camera') },
+      { text: t('onboarding.chooseFromLibrary'), onPress: () => launchPicker('library') },
+      { text: t('common.cancel'), style: 'cancel' },
+    ]);
+  };
+
+  // Progress bar — identical to the questionnaire (shared ProgressBar + plane).
+  const [trackWidth, setTrackWidth] = useState(0);
+  const displayProgress = Math.max(0.08, Math.min(0.96, progress));
+  const pct = `${displayProgress * 100}%` as `${number}%`;
+  const fillTouchOffset = sx(6);
+  const touchProgress = trackWidth > 0 ? fillTouchOffset / trackWidth : 0;
+  const fillProgress = Math.min(0.96, displayProgress + touchProgress);
 
   const trimmed = username.trim();
   const ruleLength = trimmed.length >= 4 && trimmed.length <= 20;
@@ -141,41 +216,58 @@ export function ProfileSetupScreen({
   const canConfirm = allRulesPass && availability === 'available';
 
   return (
-    <View style={styles.root}>
+    <KeyboardStickyView style={styles.root}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={sx(20)} color={colors.icon.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Create your profile</Text>
+        <Text style={styles.headerTitle}>{editMode ? t('onboarding.editProfile') : t('onboarding.createProfile')}</Text>
       </View>
 
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${Math.max(6, progress * 100)}%` }]} />
+      {!editMode ? (
         <View
-          style={[styles.airplaneWrap, { left: `${Math.max(6, progress * 100)}%` }]}
-          pointerEvents="none"
+          style={styles.progressTrack}
+          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
         >
-          <Text style={styles.airplaneIcon}>✈️</Text>
+          <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} width={trackWidth} />
+          <View style={[styles.planeWrap, { left: pct }]} pointerEvents="none">
+            <View style={styles.planeGlow}>
+              <Image source={PLANE} style={styles.planeImg} resizeMode="contain" />
+            </View>
+          </View>
         </View>
-      </View>
+      ) : null}
 
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.profileBlock}>
-        <View style={styles.avatarWrap}>
+        <Pressable style={styles.avatarWrap} onPress={choosePhoto} hitSlop={8}>
           <Image
-            source={initialPhotoUrl ? { uri: initialPhotoUrl } : DEFAULT_AVATAR}
+            source={
+              pickedPhoto
+                ? { uri: pickedPhoto }
+                : initialPhotoUrl && !photoFailed
+                ? { uri: initialPhotoUrl }
+                : DEFAULT_AVATAR
+            }
             style={styles.avatar}
             resizeMode="cover"
+            onError={() => setPhotoFailed(true)}
           />
           <View style={styles.cameraBadge}>
             <Ionicons name="camera" size={sx(14)} color={colors.gray[100]} />
           </View>
-        </View>
+        </Pressable>
 
         <View style={[styles.inputWrap, { borderColor: inputBorderColor }]}> 
           <TextInput
             value={username}
             onChangeText={setUsername}
-            placeholder="Set your username!"
+            placeholder={t('onboarding.usernamePlaceholder')}
             placeholderTextColor={colors.gray[800]}
             autoCapitalize="none"
             autoCorrect={false}
@@ -207,21 +299,21 @@ export function ProfileSetupScreen({
         </View>
 
         {availability === 'available' ? (
-          <Text style={styles.availableText}>This username is available!</Text>
+          <Text style={styles.availableText}>{t('onboarding.usernameAvailable')}</Text>
         ) : null}
 
         {(trimmed.length > 0 && availability !== 'taken' && availability !== 'available') ? (
           <View style={styles.rulesWrap}>
-            <RuleItem ok={ruleLength} text="4–20 characters" />
-            <RuleItem ok={ruleEnglishLettersAndNumbers} text="English letters and numbers only" />
-            <RuleItem ok={ruleNoSpecialExcept} text="No special characters except '_' and '.'" />
-            <RuleItem ok={ruleStartsWithLetter} text="Must start with a letter" />
+            <RuleItem ok={ruleLength} text={t('onboarding.usernameRules.length')} />
+            <RuleItem ok={ruleEnglishLettersAndNumbers} text={t('onboarding.usernameRules.alphanumeric')} />
+            <RuleItem ok={ruleNoSpecialExcept} text={t('onboarding.usernameRules.special')} />
+            <RuleItem ok={ruleStartsWithLetter} text={t('onboarding.usernameRules.startsWithLetter')} />
           </View>
         ) : null}
 
         {availability === 'taken' ? (
           <View style={styles.takenWrap}>
-            <Text style={styles.takenText}>This username is already taken</Text>
+            <Text style={styles.takenText}>{t('onboarding.usernameTaken')}</Text>
             <View style={styles.chipsRow}>
               {suggestions.map((s) => (
                 <Pressable key={s} onPress={() => setUsername(s)} style={styles.chip}>
@@ -232,20 +324,21 @@ export function ProfileSetupScreen({
           </View>
         ) : null}
       </View>
+      </ScrollView>
 
       <View style={styles.bottomWrap}>
-        <Text style={styles.publicInfo}>Your avatar and username will be public</Text>
+        <Text style={styles.publicInfo}>{t('onboarding.avatarPublicNote')}</Text>
         <Pressable
-          onPress={() => canConfirm && onConfirm(trimmed)}
+          onPress={() => canConfirm && onConfirm(trimmed, pickedPhoto)}
           disabled={!canConfirm}
           style={[styles.confirmBtn, canConfirm ? styles.confirmBtnOn : styles.confirmBtnOff]}
         >
           <Text style={[styles.confirmText, canConfirm ? styles.confirmTextOn : styles.confirmTextOff]}>
-            Confirm
+            {editMode ? t('tips.save') : t('common.confirm')}
           </Text>
         </Pressable>
       </View>
-    </View>
+    </KeyboardStickyView>
   );
 }
 
@@ -293,21 +386,33 @@ const styles = StyleSheet.create({
 
   progressTrack: {
     marginTop: sy(12),
-    width: W,
+    // Inset to match the questionnaire progress bar (paddingHorizontal sx(20)),
+    // instead of spanning the whole screen width.
+    marginHorizontal: sx(20),
     height: sy(8),
-    backgroundColor: colors.blue[100],
+    borderRadius: radius.full,
     justifyContent: 'center',
+    overflow: 'visible',
+    position: 'relative',
   },
-  progressFill: {
-    height: sy(8),
-    backgroundColor: colors.blue[500],
-  },
-  airplaneWrap: {
+  planeWrap: {
     position: 'absolute',
-    marginLeft: -sx(10),
-    top: -sy(9),
+    // Pull the plane back left so its (transparently-padded) body sits on the
+    // fill end with no gap — matches the questionnaire progress bar.
+    marginLeft: -sx(18),
+    zIndex: 4,
   },
-  airplaneIcon: { fontSize: sx(18) },
+  planeGlow: {
+    shadowColor: '#527dff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+  },
+  planeImg: {
+    width: sx(56),
+    height: sx(56),
+    backgroundColor: 'transparent',
+  },
 
   profileBlock: {
     marginTop: sy(72),
@@ -346,10 +451,12 @@ const styles = StyleSheet.create({
     marginTop: sy(22),
     minHeight: sy(68),
     borderRadius: radius['4xl'],
-    backgroundColor: colors.gray[500],
+    backgroundColor: '#f2f9ff',
     borderWidth: 3,
     paddingRight: sx(14),
     justifyContent: 'center',
+    boxShadow: '0px 0px 16px rgba(82, 125, 255, 0.32)',
+    elevation: 16,
   },
   input: {
     minHeight: sy(68),
@@ -430,8 +537,9 @@ const styles = StyleSheet.create({
     color: colors.gray[1000],
   },
 
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: sy(16) },
   bottomWrap: {
-    marginTop: 'auto',
     alignItems: 'center',
     paddingBottom: sy(8),
   },

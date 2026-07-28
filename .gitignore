@@ -13,6 +13,8 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+# Upload/release signing keys must never be committed — see docs/RELEASE.md.
+*.keystore
 *.p8
 *.p12
 *.key
@@ -44,5 +46,6 @@ yarn-error.*
 /google-services.json
 /GoogleService-Info.plist
 
-# Release APKs — kept locally in release/, too large for git history
+# Release builds — kept locally in release/, too large for git history
 /release/*.apk
+/release/*.aab

@@ -19,9 +19,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { onboardingSource } from '../../assets/onboardingAssets';
+import { SIGNIN_BIRD_SVG, SIGNIN_TOP_CLOUD_SVG, SIGNIN_BOTTOM_CLOUD_SVG } from '../../assets/signInAssets';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -29,11 +32,10 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const BG            = onboardingSource(require('../../../assets/onboarding/bg-signin.png') as ImageSourcePropType, 'bg-signin');
 const LOGO          = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
-const BIRD          = onboardingSource(require('../../../assets/mascot/bird-signin.png') as ImageSourcePropType, 'bird-signin');
 const ICON_APPLE    = onboardingSource(require('../../../assets/auth/apple.png') as ImageSourcePropType, 'apple');
-const ICON_GOOGLE   = onboardingSource(require('../../../assets/auth/google.png') as ImageSourcePropType, 'google');
+// Crisp vector Google "G" (the raster PNG looked pixelated).
+const GOOGLE_SVG = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><mask id="m0" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20"><path d="M20 0H0V20H20V0Z" fill="white"/></mask><g mask="url(#m0)"><path d="M19.6 10.2273C19.6 9.51822 19.5364 8.83642 19.4182 8.18182H10V12.05H15.3818C15.15 13.3 14.4455 14.3591 13.3864 15.0682V17.5773H16.6182C18.5091 15.8364 19.6 13.2727 19.6 10.2273Z" fill="#4285F4"/><path d="M9.99988 20C12.6999 20 14.9635 19.1045 16.618 17.5773L13.3862 15.0682C12.4908 15.6682 11.3453 16.0227 9.99988 16.0227C7.39528 16.0227 5.19078 14.2636 4.40438 11.9H1.06348V14.4909C2.70898 17.7591 6.09078 20 9.99988 20Z" fill="#34A853"/><path d="M4.4045 11.9C4.2045 11.3 4.0909 10.6591 4.0909 9.99999C4.0909 9.34089 4.2045 8.69999 4.4045 8.09999V5.50909H1.0636C0.3864 6.85909 0 8.38639 0 9.99999C0 11.6136 0.3864 13.1409 1.0636 14.4909L4.4045 11.9Z" fill="#FBBC04"/><path d="M9.99988 3.9773C11.468 3.9773 12.7862 4.4818 13.8226 5.4727L16.6908 2.6045C14.959 0.9909 12.6953 0 9.99988 0C6.09078 0 2.70898 2.2409 1.06348 5.5091L4.40438 8.1C5.19078 5.7364 7.39528 3.9773 9.99988 3.9773Z" fill="#E94235"/></g></svg>`;
 const ICON_FACEBOOK = onboardingSource(require('../../../assets/auth/facebook.png') as ImageSourcePropType, 'facebook');
 
 interface Props {
@@ -71,6 +73,7 @@ const POLICY_TEXT: Record<'terms' | 'privacy', { title: string; body: string }> 
 
 export function SignIn({ onPress, active }: Props) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { signInWithApple, signInWithGoogle, signInWithFacebook } = useAuth();
   // Covers the whole screen while a provider sign-in + Firebase exchange runs.
   // On success it stays visible until this screen unmounts (auth state flips),
@@ -149,57 +152,84 @@ export function SignIn({ onPress, active }: Props) {
 
   return (
     <View style={styles.root}>
-      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
+      <LinearGradient
+        colors={['#c9e3ff', '#f2f9ff', '#ffffff']}
+        locations={[0, 0.71, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
+      {/* Soft radial glow + subtle clouds. */}
+      <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(300) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="signinGlow" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.55} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#signinGlow)" />
+      </Svg>
+      <View pointerEvents="none" style={{ position: 'absolute', left: sx(231), top: sy(78), width: sx(144), height: sy(123) }}>
+        <SvgXml xml={SIGNIN_TOP_CLOUD_SVG} width={sx(144)} height={sy(123)} />
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', left: sx(-4), top: sy(272), width: sx(242), height: sy(163) }}>
+        <SvgXml xml={SIGNIN_BOTTOM_CLOUD_SVG} width={sx(242)} height={sy(163)} />
+      </View>
 
       {/* Logo */}
-      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }} resizeMode="contain" />
+      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15), zIndex: 10 }} resizeMode="contain" />
 
-      {/* Content frame: top=188, bottom=76 from screen edge */}
-      <View style={styles.contentFrame}>
-        {/* Bird + text, vertically centered */}
-        <View style={styles.textAndBird}>
-          <Animated.View style={{ transform: [{ translateY: birdY }] }}>
-            <Image source={BIRD} style={styles.bird} resizeMode="cover" />
-          </Animated.View>
+      {/* Bird + title/subtitle, anchored in the upper-middle of the screen. */}
+      <View style={styles.topContent} pointerEvents="none">
+        <Animated.View style={{ transform: [{ translateY: birdY }] }}>
+          <SvgXml xml={SIGNIN_BIRD_SVG} width={sx(278)} height={sy(207)} />
+        </Animated.View>
 
-          <Animated.View style={[styles.textColumn, { opacity: fadeAnim }]}>
-            {/* Title */}
-            <View style={styles.mainText}>
-              <View style={styles.headerText}>
-                <Text style={styles.titleMed}>{t('signIn.line1')}</Text>
-                <View style={styles.secondaryRow}>
-                  <Text style={styles.titleMed}>{t('signIn.line2Prefix')} </Text>
-                  <Text style={styles.titleBold}>{t('signIn.line2Bold')}</Text>
-                </View>
+        <Animated.View style={[styles.textColumn, { opacity: fadeAnim }]}>
+          <View style={styles.headerText}>
+            <Text style={styles.titleMed}>{t('signIn.line1')}</Text>
+            <View style={styles.secondaryRow}>
+              <Text style={styles.titleMed}>{t('signIn.line2Prefix')}</Text>
+              <Text style={styles.titleBold}>{t('signIn.line2Bold')}</Text>
+            </View>
+          </View>
+          <View style={styles.subtitleRow}>
+            <Text style={styles.subtitle}>{t('signIn.subtitle')}</Text>
+            <View style={styles.betaTag}>
+              <Text style={styles.betaText}>{t('signIn.beta')}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      </View>
+
+      {/* Social sign-in + terms, anchored to the bottom of the screen. */}
+      <Animated.View style={[styles.bottomGroup, { bottom: insets.bottom + sy(20), opacity: fadeAnim }]}>
+        <View style={styles.socialRow}>
+          {Platform.OS === 'ios' ? (
+            <TouchableOpacity onPress={handleApplePress} activeOpacity={0.85}>
+              <Image source={ICON_APPLE} style={styles.appleIcon} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={handleGooglePress}
+              activeOpacity={0.85}
+              disabled={authLoading || !active}
+            >
+              <View style={styles.googleBtn}>
+                <SvgXml xml={GOOGLE_SVG} width={sx(20)} height={sx(20)} />
               </View>
-              <Text style={styles.subtitle}>{t('signIn.subtitle')}</Text>
-            </View>
-
-            {/* Social sign-in icons */}
-            <View style={styles.socialRow}>
-              {Platform.OS === 'ios' && (
-                <TouchableOpacity onPress={handleApplePress} activeOpacity={0.85}>
-                  <Image source={ICON_APPLE} style={styles.appleIcon} resizeMode="cover" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                onPress={Platform.OS === 'android' ? handleGooglePress : undefined}
-                activeOpacity={0.85}
-                disabled={Platform.OS === 'android' ? authLoading || !active : false}
-              >
-                <Image source={ICON_GOOGLE} style={styles.googleIcon} resizeMode="cover" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleFacebookPress} activeOpacity={0.85}>
-                <Image source={ICON_FACEBOOK} style={styles.facebookIcon} resizeMode="cover" />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleFacebookPress} activeOpacity={0.85}>
+            <Image source={ICON_FACEBOOK} style={styles.facebookIcon} resizeMode="cover" />
+          </TouchableOpacity>
         </View>
 
         {/* Terms — links are full Pressables with hitSlop so the whole word is
             an easy tap target (not just the center of the text). */}
-        <Animated.View style={[styles.termsWrap, { opacity: fadeAnim }]}>
+        <View style={styles.termsWrap}>
           <Text style={styles.terms}>By creating an account, you agree to our</Text>
           <View style={styles.termsLinksRow}>
             <Pressable onPress={() => setPolicy('terms')} hitSlop={12}>
@@ -211,8 +241,8 @@ export function SignIn({ onPress, active }: Props) {
             </Pressable>
             <Text style={styles.terms}>.</Text>
           </View>
-        </Animated.View>
-      </View>
+        </View>
+      </Animated.View>
 
       {/* Full-screen loader while the provider sign-in + Firebase exchange runs.
           Rendered in a transparent Modal (its own window, translucent bars) so
@@ -283,34 +313,18 @@ const styles = StyleSheet.create({
     height: sy(103),
     opacity: 0.5,
   },
-  contentFrame: {
+  topContent: {
     position: 'absolute',
-    top: sy(188),
+    top: sy(200),
     left: 0,
     right: 0,
-    bottom: sy(76),
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  textAndBird: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: sy(36),
   },
-  bird: {
-    width: sx(278),
-    height: sy(208),
-  },
   textColumn: {
-    width: sx(197),
+    width: sx(300),
     alignItems: 'center',
-    gap: sy(44),
-  },
-  mainText: {
-    alignItems: 'center',
-    gap: sy(8),
-    width: '100%',
+    gap: sy(10),
   },
   headerText: {
     alignItems: 'center',
@@ -320,7 +334,37 @@ const styles = StyleSheet.create({
   secondaryRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: sx(6),
+  },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
     gap: sx(4),
+  },
+  betaTag: {
+    height: sy(16),
+    marginTop: -sy(3),
+    paddingHorizontal: sx(6),
+    borderRadius: 99,
+    backgroundColor: '#c9e3ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  betaText: {
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(11),
+    color: '#527dff',
+    letterSpacing: -0.12,
+    lineHeight: sy(16),
+  },
+  bottomGroup: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    gap: sy(20),
   },
   titleMed: {
     fontFamily: 'NationalPark_500Medium',
@@ -353,12 +397,17 @@ const styles = StyleSheet.create({
   appleIcon: {
     width: sx(44),
     height: sx(44),
-    borderRadius: sx(99),
+    borderRadius: sx(12),
   },
-  googleIcon: {
+  googleBtn: {
     width: sx(44),
     height: sx(44),
     borderRadius: sx(99),
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#c8c8c8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   facebookIcon: {
     width: sx(40),
@@ -375,16 +424,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   terms: {
-    fontFamily: 'NationalPark_400Regular',
+    fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(12),
-    color: '#93a5b9',
+    color: '#657586',
     textAlign: 'center',
     lineHeight: sy(16),
   },
   termsLink: {
-    fontFamily: 'NationalPark_600SemiBold',
-    color: '#527dff',
-    textDecorationLine: 'underline',
+    color: '#657586',
   },
   authLoadingOverlay: {
     flex: 1,

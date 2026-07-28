@@ -7,7 +7,6 @@ import {
   Image,
   ImageSourcePropType,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -27,7 +26,9 @@ import { SearchResultsScreen } from './SearchResultsScreen';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { onboardingSource } from '../assets/onboardingAssets';
+import { HOME_BIRD_SVG } from '../assets/homeBird';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -51,6 +52,9 @@ export function HomeScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { language } = useLanguage();
+  // Both search surfaces are absolutely positioned, and this app is edge-to-edge
+  // (the window never resizes for the keyboard), so they must be lifted manually.
+  const keyboardHeight = useKeyboardHeight();
 
   const [query, setQuery] = useState('');
   const [showActions, setShowActions] = useState(false);
@@ -177,10 +181,7 @@ export function HomeScreen() {
   const firstName = (user?.name ?? 'traveler').split(' ')[0];
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.flex}>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
@@ -191,7 +192,7 @@ export function HomeScreen() {
         <View style={styles.header}>
           <Image source={LOGO} style={styles.logo} resizeMode="contain" />
           <View style={styles.betaPill}>
-            <Text style={styles.betaText}>Beta</Text>
+            <Text style={styles.betaText}>{t('signIn.beta')}</Text>
           </View>
         </View>
 
@@ -201,43 +202,20 @@ export function HomeScreen() {
           <Text style={styles.questionText}>{t('home.whereNext')}</Text>
         </View>
 
-        {/* Mascot */}
+        {/* Mascot (SVG) */}
         <View style={styles.birdWrap}>
-          <Animated.Image
-            source={BIRD}
-            style={[styles.bird, { transform: [{ translateY: birdY }] }]}
-            resizeMode="contain"
-          />
+          <Animated.View style={[styles.bird, { transform: [{ translateY: birdY }] }]}>
+            <SvgXml xml={HOME_BIRD_SVG} width="100%" height="100%" />
+          </Animated.View>
         </View>
 
       </ScrollView>
 
-      {!composerExpanded ? (
-        <View style={styles.suggestionsDock}>
-          <View style={styles.suggestions}>
-            <Text style={styles.suggestionsTitle}>{t('home.tryAsking')}</Text>
-            {SUGGESTIONS.map((s) => (
-              <Pressable
-                key={s.label}
-                onPress={() => {
-                  setQuery(s.label);
-                  openSearchOverlay();
-                }}
-                style={styles.suggestionRow}
-              >
-                <View style={styles.suggestionLeft}>
-                  <Text style={styles.suggestionEmoji}>{s.emoji}</Text>
-                  <Text style={styles.suggestionLabel}>{s.label}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={sx(16)} color="#93a5b9" />
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
+      {/* New-user home is intentionally clean (greeting → bird → search pill);
+          quick suggestions live in the search overlay's "Trending" list. */}
 
       {!composerExpanded ? (
-        <View style={styles.searchDock}>
+        <View style={[styles.searchDock, keyboardHeight > 0 && { bottom: keyboardHeight + sy(8) }]}>
           <LinearGradient
             colors={['#6f95ff', '#527dff']}
             start={{ x: 0, y: 0 }}
@@ -282,7 +260,7 @@ export function HomeScreen() {
       ) : null}
 
       {composerExpanded ? (
-        <View style={styles.searchOverlay}>
+        <View style={[styles.searchOverlay, { paddingBottom: keyboardHeight }]}>
           <View style={styles.searchOverlayCard}>
             <View style={styles.searchOverlayTopBar}>
               <Pressable onPress={closeSearchOverlay} hitSlop={12} style={styles.searchOverlayCloseBtn}>
@@ -347,7 +325,7 @@ export function HomeScreen() {
           onAsk={(q) => runSearch(q)}
         />
       ) : null}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -368,10 +346,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#c9e3ff',
     borderRadius: 99,
     paddingHorizontal: sx(6),
-    height: sy(16),
+    paddingVertical: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: sy(0),
     alignSelf: 'flex-start',
   },
   betaText: {
@@ -379,7 +356,7 @@ const styles = StyleSheet.create({
     fontSize: sx(12),
     color: '#527dff',
     letterSpacing: -0.12,
-    lineHeight: sy(14),
+    lineHeight: sx(15),
   },
 
   greetingBlock: {
@@ -388,18 +365,18 @@ const styles = StyleSheet.create({
   },
   hiText: {
     fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(14),
-    lineHeight: sy(20),
+    fontSize: sx(16),
+    lineHeight: sx(21),
     color: '#657586',
-    letterSpacing: -0.14,
+    letterSpacing: -0.16,
   },
   questionText: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(24),
-    lineHeight: sy(30),
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(35),
+    lineHeight: sx(44),
     color: '#1d192b',
-    letterSpacing: -0.24,
-    marginTop: sy(4),
+    letterSpacing: -1.4,
+    marginTop: sy(12),
   },
 
   birdWrap: {
@@ -407,7 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: sy(16),
     marginTop: sy(10),
   },
-  bird: { width: sx(180), height: sy(140) },
+  bird: { width: sx(202), height: sy(149) },
 
   suggestions: {
     paddingHorizontal: 0,
@@ -423,7 +400,7 @@ const styles = StyleSheet.create({
   suggestionsTitle: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(14),
-    lineHeight: sy(20),
+    lineHeight: sx(20),
     color: '#657586',
     letterSpacing: -0.14,
     marginBottom: sy(4),
@@ -445,12 +422,12 @@ const styles = StyleSheet.create({
   },
   suggestionEmoji: {
     fontSize: sx(14),
-    lineHeight: sy(20),
+    lineHeight: sx(20),
   },
   suggestionLabel: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(14),
-    lineHeight: sy(20),
+    lineHeight: sx(20),
     color: '#332d41',
     letterSpacing: -0.14,
   },
@@ -504,7 +481,7 @@ const styles = StyleSheet.create({
     marginTop: sy(18),
     fontFamily: 'NationalPark_700Bold',
     fontSize: sx(36),
-    lineHeight: sy(40),
+    lineHeight: sx(40),
     color: '#221e31',
     letterSpacing: -0.28,
   },
@@ -524,12 +501,12 @@ const styles = StyleSheet.create({
   },
   overlayChipEmoji: {
     fontSize: sx(14),
-    lineHeight: sy(18),
+    lineHeight: sx(18),
   },
   overlayChipLabel: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(15),
-    lineHeight: sy(18),
+    lineHeight: sx(18),
     color: '#383448',
     letterSpacing: -0.14,
   },
@@ -549,7 +526,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(16),
-    lineHeight: sy(30),
+    lineHeight: sx(30),
     color: '#1d192b',
     letterSpacing: -0.18,
     textAlign: 'left',

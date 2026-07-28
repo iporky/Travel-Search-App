@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Image, ScrollView, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -7,12 +8,20 @@ import { colors, gradients, radius, shadows, spacing, typography } from '../them
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageScreen } from './LanguageScreen';
+import { ProfileSetupScreen } from './onboarding/ProfileSetupScreen';
 
 export function ProfileScreen() {
   const { t } = useTranslation();
-  const { user, signOut, restartPersonalizationFromQuestions } = useAuth();
+  const { user, signOut, restartPersonalizationFromQuestions, saveProfile, refreshProfile } = useAuth();
   const { language } = useLanguage();
   const [showLanguage, setShowLanguage] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  // Pull the latest backend profile (authoritative S3 photo) when the screen
+  // opens, so the displayed avatar always reflects the uploaded picture.
+  useEffect(() => {
+    refreshProfile();
+  }, [refreshProfile]);
   const initials = user?.name ? user.name.charAt(0).toUpperCase() : 'K';
   const stats = [
     { label: t('profile.stats.chats'), value: '128' },
@@ -39,6 +48,13 @@ export function ProfileScreen() {
     else if (action === 'language') setShowLanguage(true);
   };
 
+  // Open the name/photo editor, pulling the freshest backend profile first so
+  // the editor is seeded with the current uploaded photo.
+  const openEditor = () => {
+    refreshProfile();
+    setEditing(true);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <LinearGradient
@@ -47,14 +63,18 @@ export function ProfileScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
-        <View style={styles.avatar}>
+        <Pressable style={styles.avatar} onPress={openEditor} hitSlop={6}>
           {user?.photo ? (
             <Image source={{ uri: user.photo }} style={styles.avatarImg} />
           ) : (
             <Text style={[typography.heading32Medium, { color: colors.text.onDark }]}>{initials}</Text>
           )}
-        </View>
-        <Text style={[typography.body16Medium, { color: colors.text.onDark }]}>{user?.name ?? 'Konnect User'}</Text>
+        </Pressable>
+        {/* Tap the name banner to edit username + photo */}
+        <Pressable style={styles.nameRow} onPress={openEditor} hitSlop={8}>
+          <Text style={[typography.body16Medium, { color: colors.text.onDark }]}>{user?.name ?? 'Konnect User'}</Text>
+          <Ionicons name="pencil" size={14} color={colors.text.onDark} style={styles.editPencil} />
+        </Pressable>
         <Text style={[typography.caption12Medium, { color: colors.text.onDark, opacity: 0.8 }]}>
           {user?.email ?? 'user@konnect.app'}
         </Text>
@@ -101,6 +121,27 @@ export function ProfileScreen() {
       </TouchableOpacity>
 
       <LanguageScreen visible={showLanguage} onClose={() => setShowLanguage(false)} />
+
+      {/* Edit username + profile photo (reuses the onboarding profile screen). */}
+      <Modal visible={editing} animationType="slide" onRequestClose={() => setEditing(false)}>
+        <SafeAreaView style={styles.editSheet} edges={['top', 'left', 'right']}>
+          <ProfileSetupScreen
+            editMode
+            progress={1}
+            initialValue={(user?.name ?? '').replace(/[^A-Za-z0-9._]/g, '')}
+            initialPhotoUrl={user?.photo ?? null}
+            onBack={() => setEditing(false)}
+            onConfirm={async (username, photoUri) => {
+              try {
+                await saveProfile({ name: username, photoUri: photoUri ?? undefined });
+              } catch (e) {
+                console.warn('[Profile] save failed', e);
+              }
+              setEditing(false);
+            }}
+          />
+        </SafeAreaView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -123,6 +164,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing[2],
   },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  editPencil: { opacity: 0.9, marginLeft: 4 },
+  editSheet: { flex: 1, backgroundColor: '#fff' },
   statsRow: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[5] },
   statCard: {
     flex: 1,

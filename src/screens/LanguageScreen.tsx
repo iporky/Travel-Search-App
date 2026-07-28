@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { AppLanguage, LANGUAGES, useLanguage } from '../context/LanguageContext';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -32,6 +33,8 @@ interface Props {
  */
 export function LanguageScreen({ visible, onClose }: Props) {
   const { t } = useTranslation();
+  // Modal windows don't resize for the keyboard on Android — lift the CTA.
+  const keyboardHeight = useKeyboardHeight();
   const { language, setLanguage } = useLanguage();
   const [pending, setPending] = useState<AppLanguage>(language);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -121,7 +124,7 @@ export function LanguageScreen({ visible, onClose }: Props) {
         </ScrollView>
 
         {/* Bottom CTA */}
-        <View style={styles.bottomBar}>
+        <View style={[styles.bottomBar, { paddingBottom: keyboardHeight }]}>
           <Pressable onPress={confirm} style={styles.cta}>
             <Text style={styles.ctaText}>{t('common.confirm')}</Text>
           </Pressable>

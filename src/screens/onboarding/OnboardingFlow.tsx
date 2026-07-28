@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FLOW_A_QUESTIONS,
@@ -33,6 +34,8 @@ import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { QuestionScreen } from './QuestionScreen';
+import { ProfileSetupScreen } from './ProfileSetupScreen';
+import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -44,15 +47,14 @@ const BIRD = onboardingSource(
   require('../../../assets/mascot/bird-hero.png') as ImageSourcePropType,
   'bird-hero',
 );
-const BIRD_AVATAR_IMG = onboardingSource(
-  require('../../../assets/onboarding/avatar_container.png') as ImageSourcePropType,
-  'avatar_container',
-);
-
 const BACK_BTN_IMG = onboardingSource(
   require('../../../assets/onboarding/chevron-left.png') as ImageSourcePropType,
   'chevron-left',
 );
+
+// Counter +/- icons (provided SVGs, gray #657586).
+const MINUS_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12H19" stroke="#657586" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const PLUS_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4.5V19.5M19.5 12H4.5" stroke="#657586" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 
 interface Props {
@@ -61,11 +63,19 @@ interface Props {
 }
 
 export function OnboardingFlow({ onComplete }: Props) {
-  const { user } = useAuth();
+  const { user, saveProfile, fetchProfile } = useAuth();
   const { language } = useLanguage();
-  // 'intro' shows a brief "Let's get you set up" transition so the questions
-  // don't appear abruptly right after sign-in.
-  const [phase, setPhase] = useState<'intro' | 'questions' | 'welcome'>('intro');
+  // Flow: 'intro' (Let's personalize + Get started) → 'profile' (name + avatar)
+  // → 'questions' → 'welcome'.
+  const [phase, setPhase] = useState<'intro' | 'profile' | 'questions' | 'welcome'>('intro');
+  // If the backend already has a profile (username set) for this user, skip the
+  // name/photo screen and go straight to the questions.
+  const [skipProfile, setSkipProfile] = useState(false);
+  // Default username seeded from the provider display name (Google/Facebook).
+  const initialUsername = (user?.name ?? '')
+    .replace(/[^A-Za-z0-9._]/g, '')
+    .replace(/^[^A-Za-z]+/, '')
+    .slice(0, 20);
   // Start with Flow A default; branch after purpose is answered
   const [questionList, setQuestionList] = useState<OnboardingQuestion[]>(FLOW_A_QUESTIONS);
   const [step, setStep] = useState(0);
@@ -79,6 +89,21 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   const total = questionList.length;
   const current = questionList[step];
+
+  // On flow start, check whether the user already has a profile (username +
+  // photo). If so, skip the name/photo selection screen entirely.
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        if (profile?.username) setSkipProfile(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchProfile]);
 
   // On flow start, load any existing record and preload its selections. If one
   // exists, all writes become PATCH (the record is already created).
@@ -183,13 +208,34 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   let body: React.ReactNode;
   if (phase === 'intro') {
-    body = <SetupIntro onDone={() => setPhase('questions')} />;
+    // Skip the name/photo screen when the user already has a backend profile.
+    body = <SetupIntro onStart={() => setPhase(skipProfile ? 'questions' : 'profile')} />;
+  } else if (phase === 'profile') {
+    body = (
+      <ProfileSetupScreen
+        progress={0.06}
+        onBack={() => setPhase('intro')}
+        onConfirm={async (username, photoUri) => {
+          try {
+            await saveProfile({ name: username, photoUri: photoUri ?? undefined });
+          } catch (e) {
+            console.warn('[Onboarding] save profile failed', e);
+          }
+          setPhase('questions');
+        }}
+        initialValue={initialUsername}
+        initialPhotoUrl={user?.photo ?? null}
+      />
+    );
   } else if (phase === 'welcome') {
     body = <Welcome name={user?.name || 'Traveler'} onContinue={onComplete} />;
   } else if (current?.layout === 'counter') {
-    // NumberOfPeople stepper — a bottom-sheet overlay on top of the previous
-    // question (per Figma), not a standalone screen.
+    // NumberOfPeople stepper — a dim bottom-sheet overlay on top of the previous
+    // question (per Figma), not a standalone screen. The base page keeps its own
+    // back button and its own progress value: the overlay must not remove the
+    // back button or advance the progress bar (it's just an overlay).
     const prevQuestion = step > 0 ? questionList[step - 1] : null;
+    const baseProgress = (step - 1 + 0.5) / total;
     body = (
       <>
         {prevQuestion ? (
@@ -198,9 +244,9 @@ export function OnboardingFlow({ onComplete }: Props) {
             selected={answers[prevQuestion.key] ?? []}
             onToggle={() => {}}
             onConfirm={() => {}}
-            onBack={() => {}}
-            progress={progress}
-            canGoBack={false}
+            onBack={handleBack}
+            progress={baseProgress}
+            canGoBack={step - 1 > 0}
           />
         ) : null}
         <CounterOverlay
@@ -244,39 +290,22 @@ export function OnboardingFlow({ onComplete }: Props) {
   );
 }
 
-// ─── "Let's get you set up" intro transition ─────────────────────────────────
-function SetupIntro({ onDone }: { onDone: () => void }) {
+// ─── "Let's personalize your travel experience" intro (waits for Get started) ─
+function SetupIntro({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
   const rise = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
-    const anim = Animated.sequence([
-      // Fade + rise + settle in
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 550,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(rise, {
-          toValue: 0,
-          duration: 550,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
-      ]),
-      // Hold long enough to read
-      Animated.delay(1400),
-      // Fade out, then hand off to the questions
-      Animated.timing(opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+    // Fade + rise + settle in, then wait for the user to tap Get started.
+    const anim = Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 550, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+      Animated.timing(rise, { toValue: 0, duration: 550, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
     ]);
-    anim.start(({ finished }) => {
-      if (finished) onDone();
-    });
+    anim.start();
     return () => anim.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -288,15 +317,32 @@ function SetupIntro({ onDone }: { onDone: () => void }) {
       >
         <Image source={BIRD} style={introStyles.bird} resizeMode="contain" />
         <Text style={introStyles.title}>{t('onboarding.setupTitle')}</Text>
-        <Text style={introStyles.subtitle}>{t('onboarding.setupSubtitle')}</Text>
       </Animated.View>
+
+      <Pressable onPress={onStart} style={[introStyles.cta, { marginBottom: Math.max(insets.bottom, sy(8)) }]}>
+        <Text style={introStyles.ctaText}>{t('onboarding.getStarted')}</Text>
+      </Pressable>
     </View>
   );
 }
 
 const introStyles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  center: { alignItems: 'center', paddingHorizontal: sx(32), gap: sy(14) },
+  root: { flex: 1, alignItems: 'center', paddingBottom: sy(8) },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: sx(32), gap: sy(14) },
+  cta: {
+    height: sy(56),
+    width: W - sx(40),
+    borderRadius: sx(20),
+    backgroundColor: '#527dff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaText: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(16),
+    color: '#f2f9ff',
+    letterSpacing: -0.16,
+  },
   bird: { width: sx(150), height: sy(118), marginBottom: sy(6) },
   title: {
     fontFamily: 'NationalPark_700Bold',
@@ -345,11 +391,15 @@ function CounterOverlay({
               style={sheet.stepBtn}
               hitSlop={12}
             >
-              <Text style={sheet.stepBtnText}>−</Text>
+              <SvgXml xml={MINUS_SVG} width={sx(24)} height={sx(24)} />
             </Pressable>
             <Text style={sheet.value}>{count}</Text>
-            <Pressable onPress={() => setCount((c) => c + 1)} style={sheet.stepBtn} hitSlop={12}>
-              <Text style={sheet.stepBtnText}>+</Text>
+            <Pressable
+              onPress={() => setCount((c) => Math.min(100, c + 1))}
+              style={sheet.stepBtn}
+              hitSlop={12}
+            >
+              <SvgXml xml={PLUS_SVG} width={sx(24)} height={sx(24)} />
             </Pressable>
           </View>
           <Pressable onPress={() => onConfirm(count)} style={sheet.cta}>
@@ -386,34 +436,28 @@ const sheet = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: sx(28),
+    justifyContent: 'center',
+    gap: sx(12),
   },
   stepBtn: {
-    width: sx(44),
-    height: sx(44),
+    width: sx(48),
+    height: sx(48),
     borderRadius: 999,
-    backgroundColor: '#eaf2ff',
+    backgroundColor: '#d8ecfb',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepBtnText: {
-    // Lighter weight so the bold value reads as the primary element.
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: sx(24),
-    color: '#8ca0b7',
-    lineHeight: sx(28),
-  },
   value: {
     fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(56),
-    // lineHeight == fontSize + no font padding → the digits sit vertically
+    fontSize: sx(72),
+    // lineHeight ≈ 0.9·fontSize + no font padding → the digits sit vertically
     // centred with the +/- circles instead of dropping below the baseline.
-    lineHeight: sx(56),
+    lineHeight: sx(65),
     includeFontPadding: false,
     textAlignVertical: 'center',
     color: '#1d192b',
     letterSpacing: -1,
-    minWidth: sx(96),
+    minWidth: sx(84),
     textAlign: 'center',
   },
   cta: {
@@ -472,7 +516,7 @@ function CounterScreen({
 
       {/* Question bubble */}
       <View style={ctr.bubbleRow}>
-        <Image source={BIRD_AVATAR_IMG} style={ctr.birdAvatar} resizeMode="contain" />
+        <Image source={AVATAR_SOURCE} style={ctr.birdAvatar} resizeMode="contain" />
         <View style={ctr.bubble}>
           <View style={ctr.bubbleTail} />
           <Text style={ctr.bubbleText}>{question.prompt}</Text>

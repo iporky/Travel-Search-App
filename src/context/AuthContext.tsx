@@ -39,6 +39,7 @@ import DeviceInfo from 'react-native-device-info';
 import { Platform } from 'react-native';
 import { addUser } from '../api/users';
 import { verifyFirebaseSso } from '../api/auth';
+import { getProfile, updateProfile } from '../api/profile';
 
 // Initialize the Facebook SDK once at module load (reads the app id / client
 // token from the native resources configured in AndroidManifest/strings.xml).
@@ -63,6 +64,8 @@ const ONBOARDING_KEY = '@konnect:onboarding_done';
 // Personalization onboarding is tracked per-user so each account completes it once.
 const personalizationKey = (uid: string) => `@konnect:personalization_done:${uid}`;
 const profileNameKey = (uid: string) => `@konnect:profile_name:${uid}`;
+// A locally-picked profile photo (camera/library) overrides the provider photo.
+const profilePhotoKey = (uid: string) => `@konnect:profile_photo:${uid}`;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface KonnectUser {
@@ -89,17 +92,33 @@ interface AuthContextValue {
   completePersonalization: () => Promise<void>;
   restartPersonalizationFromQuestions: () => Promise<void>;
   updateProfileName: (name: string) => Promise<void>;
+  /** Persist a locally-picked profile photo (camera/library) for this user. */
+  updateProfilePhoto: (uri: string) => Promise<void>;
+  /** Save display name and/or a new photo to the backend in one PATCH. */
+  saveProfile: (fields: { name?: string; photoUri?: string }) => Promise<void>;
+  /** GET the backend profile for the signed-in user (null if none). */
+  fetchProfile: () => Promise<import('../api/profile').UserProfile | null>;
+  /**
+   * GET the backend profile and adopt its `profile_pic` (S3 URL) as the
+   * authoritative avatar, overriding the Firebase photo. Call on sign-in and
+   * whenever the profile screen/editor opens.
+   */
+  refreshProfile: () => Promise<import('../api/profile').UserProfile | null>;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function mapUser(fb: FirebaseAuthTypes.User, preferredName?: string | null): KonnectUser {
+function mapUser(
+  fb: FirebaseAuthTypes.User,
+  preferredName?: string | null,
+  preferredPhoto?: string | null,
+): KonnectUser {
   return {
     id: fb.uid,
     name: preferredName?.trim() || fb.displayName || 'Konnect User',
     email: fb.email ?? '',
-    photo: fb.photoURL ?? null,
+    photo: preferredPhoto || fb.photoURL || null,
   };
 }
 
@@ -125,9 +144,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = auth().onAuthStateChanged(async (fbUser) => {
       if (fbUser) {
         const savedProfileName = await AsyncStorage.getItem(profileNameKey(fbUser.uid));
-        setUser(mapUser(fbUser, savedProfileName));
+        const savedProfilePhoto = await AsyncStorage.getItem(profilePhotoKey(fbUser.uid));
+        setUser(mapUser(fbUser, savedProfileName, savedProfilePhoto));
         await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
         setHasSeenOnboarding(true);
+
+        // The backend profile_pic (S3 URL) is the source of truth for the
+        // avatar — fetch it on every sign-in and let it override the Firebase
+        // photo. Only falls back to Firebase when the backend has no pic.
+        getProfile()
+          .then((profile) => {
+            if (!profile) return;
+            if (profile.profile_pic) {
+              AsyncStorage.setItem(profilePhotoKey(fbUser.uid), profile.profile_pic).catch(() => {});
+            }
+            if (profile.name) {
+              AsyncStorage.setItem(profileNameKey(fbUser.uid), profile.name).catch(() => {});
+            }
+            setUser((prev) =>
+              prev && prev.id === fbUser.uid
+                ? {
+                    ...prev,
+                    name: profile.name || prev.name,
+                    // Backend pic wins; keep whatever we had if it's null.
+                    photo: profile.profile_pic ?? prev.photo,
+                  }
+                : prev,
+            );
+          })
+          .catch((e) => console.warn('[Auth] getProfile on sign-in failed', e?.message ?? e));
 
         // Restore whether this specific user already finished personalization.
         // On a fresh sign-in, always start the questions regardless of any
@@ -367,26 +412,103 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPersonalizationStartsFromQuestions(true);
   }, []);
 
-  const updateProfileName = useCallback(async (name: string) => {
-    const trimmed = name.trim();
+  // Save the display name and/or a newly-picked photo to the backend
+  // (PATCH /api/v1/profile/{uid}) and reflect the result locally. The photo is
+  // uploaded as a file and the returned public S3 URL becomes user.photo, so it
+  // persists and is shareable (a local file:// uri never leaves the device).
+  const saveProfile = useCallback(
+    async (fields: { name?: string; photoUri?: string }): Promise<void> => {
+      const fbUser = auth().currentUser;
+      if (!fbUser) return;
+      const name = fields.name?.trim();
+
+      // Optimistic local update so the UI reflects the change immediately.
+      if (name) {
+        await AsyncStorage.setItem(profileNameKey(fbUser.uid), name);
+      }
+      if (fields.photoUri) {
+        await AsyncStorage.setItem(profilePhotoKey(fbUser.uid), fields.photoUri);
+      }
+      setUser((prev) =>
+        prev
+          ? { ...prev, name: name || prev.name, photo: fields.photoUri ?? prev.photo }
+          : prev,
+      );
+
+      try {
+        // The API `username` must be strict alphanumeric (^[a-zA-Z0-9]{4,20}$);
+        // send the display value as `name` and a sanitized copy as `username`.
+        const username = name
+          ? name.replace(/[^A-Za-z0-9]/g, '').slice(0, 20)
+          : undefined;
+        const profile = await updateProfile({
+          name,
+          username: username && username.length >= 4 ? username : undefined,
+          photoUri: fields.photoUri,
+        });
+        // Adopt server truth (esp. the S3 photo URL).
+        if (profile.profile_pic) {
+          await AsyncStorage.setItem(profilePhotoKey(fbUser.uid), profile.profile_pic);
+        }
+        if (profile.name) {
+          await AsyncStorage.setItem(profileNameKey(fbUser.uid), profile.name);
+        }
+        setUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: profile.name || prev.name,
+                photo: profile.profile_pic ?? prev.photo,
+              }
+            : prev,
+        );
+      } catch (e) {
+        console.warn('[Auth] saveProfile (PATCH /profile) failed', e);
+      }
+    },
+    [],
+  );
+
+  // Back-compat thin wrappers.
+  const updateProfileName = useCallback(
+    (name: string) => saveProfile({ name }),
+    [saveProfile],
+  );
+  const updateProfilePhoto = useCallback(
+    (uri: string) => saveProfile({ photoUri: uri }),
+    [saveProfile],
+  );
+
+  const fetchProfile = useCallback(() => getProfile().catch(() => null), []);
+
+  // Fetch the backend profile and adopt its S3 photo as the authoritative
+  // avatar (overriding the Firebase pic). Used on the profile screen / editor.
+  const refreshProfile = useCallback(async () => {
     const fbUser = auth().currentUser;
-    if (!fbUser || !trimmed) return;
-
-    await AsyncStorage.setItem(profileNameKey(fbUser.uid), trimmed);
-    setUser((prev) => (prev ? { ...prev, name: trimmed } : prev));
-
+    if (!fbUser) return null;
     try {
-      await addUser({
-        uid: fbUser.uid,
-        name: fbUser.displayName,
-        profileName: trimmed,
-        email: fbUser.email,
-        photoUrl: fbUser.photoURL,
-        provider: fbUser.providerData[0]?.providerId ?? 'firebase',
-        createdAt: new Date().toISOString(),
-      });
+      const profile = await getProfile();
+      if (profile) {
+        if (profile.profile_pic) {
+          await AsyncStorage.setItem(profilePhotoKey(fbUser.uid), profile.profile_pic);
+        }
+        if (profile.name) {
+          await AsyncStorage.setItem(profileNameKey(fbUser.uid), profile.name);
+        }
+        setUser((prev) =>
+          prev && prev.id === fbUser.uid
+            ? {
+                ...prev,
+                name: profile.name || prev.name,
+                photo: profile.profile_pic ?? prev.photo,
+              }
+            : prev,
+        );
+      }
+      return profile;
     } catch (e) {
-      console.warn('[Auth] profile name sync failed', e);
+      console.warn('[Auth] refreshProfile failed', e);
+      return null;
     }
   }, []);
 
@@ -406,6 +528,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         completePersonalization,
         restartPersonalizationFromQuestions,
         updateProfileName,
+        updateProfilePhoto,
+        saveProfile,
+        fetchProfile,
+        refreshProfile,
       }}
     >
       {children}

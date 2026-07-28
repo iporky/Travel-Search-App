@@ -11,8 +11,18 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { onboardingSource } from '../../assets/onboardingAssets';
+import {
+  BUZZ_BIRD_TOP_SVG,
+  BUZZ_BIRD_MID_SVG,
+  BUZZ_BIRD_BOTTOM_SVG,
+  BUZZ_MAIN_BIRD_SVG,
+  BUZZ_LINE_SVG,
+  BUZZ_TOP_CLOUD_SVG,
+  BUZZ_BOTTOM_CLOUD_SVG,
+} from '../../assets/screen3Buzz';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -20,12 +30,7 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const BG     = onboardingSource(require('../../../assets/onboarding/bg-screen3.png') as ImageSourcePropType, 'bg-screen3');
-const LOGO   = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
-const BIRD1  = onboardingSource(require('../../../assets/mascot/bird-buzz-1.png') as ImageSourcePropType, 'bird-buzz-1');
-const BIRD2  = onboardingSource(require('../../../assets/mascot/bird-buzz-2.png') as ImageSourcePropType, 'bird-buzz-2');
-const BIRD3  = onboardingSource(require('../../../assets/mascot/bird-buzz-3.png') as ImageSourcePropType, 'bird-buzz-3');
-const BIRD4  = onboardingSource(require('../../../assets/mascot/bird-buzz-4.png') as ImageSourcePropType, 'bird-buzz-4');
+const LOGO = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 
 interface Props {
   activeIndex?: number;
@@ -36,136 +41,133 @@ interface Props {
 export function SplashWelcome3({ onPress, active }: Props) {
   const { t } = useTranslation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  // group entrance values (bird + bubble pairs), fade in staggered 0.4s
+  // group entrances: bird+bubble pairs (g1-g3) then the main bird (g4)
   const g1 = useRef(new Animated.Value(0)).current;
   const g2 = useRef(new Animated.Value(0)).current;
   const g3 = useRef(new Animated.Value(0)).current;
-  // independent float values — one per element so they drift at different rates
-  const fb1 = useRef(new Animated.Value(0)).current; // bird 1
-  const fb2 = useRef(new Animated.Value(0)).current; // bird 2
-  const fb3 = useRef(new Animated.Value(0)).current; // bird 3
-  const fb4 = useRef(new Animated.Value(0)).current; // bird 4
-  const fbl1 = useRef(new Animated.Value(0)).current; // bubble 1
-  const fbl2 = useRef(new Animated.Value(0)).current; // bubble 2
-  const fbl3 = useRef(new Animated.Value(0)).current; // bubble 3
+  const g4 = useRef(new Animated.Value(0)).current;
+  // independent float loops
+  const fb1 = useRef(new Animated.Value(0)).current;
+  const fb2 = useRef(new Animated.Value(0)).current;
+  const fb3 = useRef(new Animated.Value(0)).current;
+  const fb4 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!active) return;
     fadeAnim.setValue(0);
-    [g1, g2, g3].forEach((g) => g.setValue(0));
+    [g1, g2, g3, g4].forEach((g) => g.setValue(0));
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.out(Easing.ease) }).start();
-    // Bird+Bubble pairs fade in together, 0.4s apart; bubbles slide up slightly.
-    Animated.stagger(400, [g1, g2, g3].map((g) =>
+    Animated.stagger(380, [g1, g2, g3, g4].map((g) =>
       Animated.timing(g, { toValue: 1, duration: 550, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     )).start();
   }, [active]);
 
-  // Float loops — always running, each at a different speed so they feel independent
   useEffect(() => {
-    const mk = (v: Animated.Value, dur: number, initDelay = 0) =>
+    const mk = (v: Animated.Value, dur: number, delay = 0) =>
       Animated.loop(Animated.sequence([
-        Animated.delay(initDelay),
+        Animated.delay(delay),
         Animated.timing(v, { toValue: 1, duration: dur / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         Animated.timing(v, { toValue: 0, duration: dur / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]));
-    const anims = [
-      mk(fb1,  2000,   0),
-      mk(fb2,  2300, 400),
-      mk(fb3,  1900, 200),
-      mk(fb4,  2200, 700),
-      mk(fbl1, 2400, 300),
-      mk(fbl2, 2100, 600),
-      mk(fbl3, 1950, 100),
-    ];
+    const anims = [mk(fb1, 2000, 0), mk(fb2, 2300, 400), mk(fb3, 1900, 200), mk(fb4, 2200, 600)];
     anims.forEach((a) => a.start());
     return () => anims.forEach((a) => a.stop());
   }, []);
 
   const fy = (v: Animated.Value, amp = 7) => v.interpolate({ inputRange: [0, 1], outputRange: [0, -amp] });
-  // bubble slides up slightly as it fades in
   const slide = (g: Animated.Value) => g.interpolate({ inputRange: [0, 1], outputRange: [sy(12), 0] });
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      <Image source={BG} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
+      <LinearGradient
+        colors={['#cfe6ff', '#e4f0ff', '#f3f6fe']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* ── Speech bubbles (rendered before birds so birds appear on top) ── */}
+      {/* Soft radial glow. */}
+      <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(360) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="s3glow" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.5} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#s3glow)" />
+      </Svg>
 
-      {/* Bubble 1 — "Is Hongdae packed right now?" top-left, rot -9.88° */}
+      {/* Subtle clouds (SVGs bake in blur + opacity + flip). */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: sx(221), top: sy(84), width: sx(180), height: sy(123) }}>
+        <SvgXml xml={BUZZ_TOP_CLOUD_SVG} width={sx(180)} height={sy(123)} />
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', left: sx(-69), top: sy(248), width: sx(249), height: sy(163) }}>
+        <SvgXml xml={BUZZ_BOTTOM_CLOUD_SVG} width={sx(249)} height={sy(163)} />
+      </View>
+
+      {/* Dashed connector line between the birds. */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(40), top: sy(182), width: sx(237), height: sy(342), opacity: fadeAnim }}>
+        <SvgXml xml={BUZZ_LINE_SVG} width={sx(237)} height={sy(342)} />
+      </Animated.View>
+
+      {/* ── Speech bubbles (behind birds) ── */}
+      {/* Bubble 1 — "Is Hongdae packed right now?" (top, rot -9.88).
+          Sits just under the top bird so its corner touches it. */}
       <Animated.View style={[styles.bubbleOuter, {
-        left: sx(19), top: sy(170),
-        width: sx(219), height: 54,
-        opacity: g1,
-        transform: [{ rotate: '-9.88deg' }, { translateY: slide(g1) }, { translateY: fy(fbl1, 6) }],
+        left: sx(16), top: sy(182),
+        opacity: g1, transform: [{ rotate: '-9.88deg' }, { translateY: slide(g1) }, { translateY: fy(fb1, 6) }],
       }]}>
         <View style={[styles.bubble, styles.bubbleRightTab]}>
           <Text style={styles.bubbleText}>{t('splash.three.bubbles.hongdae')}</Text>
         </View>
       </Animated.View>
 
-      {/* Bubble 2 — "Seongsu cafés are blowing up!" mid-right, rot 7.58° */}
+      {/* Bubble 2 — "Seongsu cafes are blowing up!" (mid, rot 7.58). Anchored by
+          its right edge (where the bird perches) so it grows leftward / wraps to
+          fit longer translations instead of truncating. */}
       <Animated.View style={[styles.bubbleOuter, {
-        left: sx(110), top: sy(290),
-        width: sx(220), height: 54,
-        opacity: g2,
-        transform: [{ rotate: '7.58deg' }, { translateY: slide(g2) }, { translateY: fy(fbl2, 8) }],
+        right: sx(42), top: sy(286), alignItems: 'flex-end',
+        opacity: g2, transform: [{ rotate: '7.58deg' }, { translateY: slide(g2) }, { translateY: fy(fb2, 8) }],
       }]}>
-        <View style={[styles.bubble, styles.bubbleLeftTab]}>
-          <Text style={styles.bubbleText}>{t('splash.three.bubbles.seongsu')}</Text>
+        <View style={[styles.bubble, styles.bubbleLeftTab, { alignItems: 'flex-start' }]}>
+          <Text style={[styles.bubbleText, { textAlign: 'left' }]}>{t('splash.three.bubbles.seongsu')}</Text>
         </View>
       </Animated.View>
 
-      {/* Bubble 3 — "Bring cash for street food" bottom-left, rot -8.88° */}
+      {/* Bubble 3 — "Bring cash for street food" (bottom, rot -8.88) */}
       <Animated.View style={[styles.bubbleOuter, {
-        left: sx(48), top: sy(410),
-        width: sx(190), height: 54,
-        opacity: g3,
-        transform: [{ rotate: '-8.88deg' }, { translateY: slide(g3) }, { translateY: fy(fbl3, 7) }],
+        left: sx(45), top: sy(436),
+        opacity: g3, transform: [{ rotate: '-8.88deg' }, { translateY: slide(g3) }, { translateY: fy(fb3, 7) }],
       }]}>
         <View style={[styles.bubble, styles.bubbleRightTab]}>
           <Text style={styles.bubbleText}>{t('splash.three.bubbles.streetFood')}</Text>
         </View>
       </Animated.View>
 
-      {/* ── Birds (rendered after bubbles → on top). No movement — fade in with their pair. ── */}
-
-      {/* Bird 1 — top-center */}
-      <Animated.Image
-        source={BIRD1}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: sx(147), top: sy(98), width: sx(98), height: sy(80), opacity: g1, transform: [{ translateY: fy(fb1, 7) }] }}
-      />
-
-      {/* Bird 2 — mid-right */}
-      <Animated.Image
-        source={BIRD2}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: sx(277), top: sy(246), width: sx(101), height: sy(82), opacity: g2, transform: [{ translateY: fy(fb2, 9) }] }}
-      />
-
-      {/* Bird 3 — left side */}
-      <Animated.Image
-        source={BIRD3}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: sx(2), top: sy(363), width: sx(105), height: sy(85), opacity: g3, transform: [{ translateY: fy(fb3, 6) }] }}
-      />
-
-      {/* Bird 4 — bottom-right, large */}
-      <Animated.Image
-        source={BIRD4}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: sx(237), top: sy(446), width: sx(133), height: sy(105), opacity: g3, transform: [{ translateY: fy(fb4, 8) }] }}
-      />
+      {/* ── Birds (SVG, on top of bubbles) ── */}
+      {/* Bird top */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(145), top: sy(111), width: sx(85), height: sy(71), opacity: g1, transform: [{ translateY: fy(fb1, 7) }] }}>
+        <SvgXml xml={BUZZ_BIRD_TOP_SVG} width={sx(85)} height={sy(71)} />
+      </Animated.View>
+      {/* Bird mid — perches on the bubble's top-right corner (touching it). */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(272), top: sy(238), width: sx(90), height: sy(77), opacity: g2, transform: [{ translateY: fy(fb2, 9) }] }}>
+        <SvgXml xml={BUZZ_BIRD_MID_SVG} width={sx(90)} height={sy(77)} />
+      </Animated.View>
+      {/* Bird bottom-left — sits on the bubble's top-left corner (touching it). */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(20), top: sy(400), width: sx(87), height: sy(59), opacity: g3, transform: [{ translateY: fy(fb3, 6) }] }}>
+        <SvgXml xml={BUZZ_BIRD_BOTTOM_SVG} width={sx(87)} height={sy(59)} />
+      </Animated.View>
+      {/* Main bird bottom-right */}
+      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(214), top: sy(440), width: sx(152), height: sy(120), opacity: g4, transform: [{ translateY: fy(fb4, 8) }] }}>
+        <SvgXml xml={BUZZ_MAIN_BIRD_SVG} width={sx(152)} height={sy(120)} />
+      </Animated.View>
 
       {/* Logo */}
-      <Image
-        source={LOGO}
-        style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }}
-        resizeMode="contain"
-      />
+      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }} resizeMode="contain" />
 
-      {/* Bottom text & pagination */}
-      <View style={[styles.bottomContent, { bottom: sy(172), paddingHorizontal: sx(16) }]}>
+      {/* Bottom text */}
+      <View style={[styles.bottomContent, { bottom: sy(129), paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
           <View style={styles.titleRow}>
             <Text style={styles.titleBold}>{t('splash.three.titleBold')} </Text>
@@ -174,7 +176,6 @@ export function SplashWelcome3({ onPress, active }: Props) {
           <Text style={styles.subtitle}>{t('splash.three.subtitle')}</Text>
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
-
       </View>
     </Pressable>
   );
@@ -184,9 +185,9 @@ const styles = StyleSheet.create({
   root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#f3f6fe' },
   bubbleOuter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   bubble: {
-    width: '100%',
+    maxWidth: sx(245),
     backgroundColor: '#f2f9ff',
-    paddingLeft : sx(16), paddingRight: sx(12), paddingVertical: sx(8),
+    paddingLeft: sx(16), paddingRight: sx(12), paddingVertical: sx(8),
     justifyContent: 'center',
     shadowColor: '#B2C5FF',
     shadowOffset: { width: 0, height: 4 },
@@ -196,13 +197,11 @@ const styles = StyleSheet.create({
   },
   bubbleRightTab: { borderTopLeftRadius: 0, borderTopRightRadius: sx(12), borderBottomLeftRadius: sx(12), borderBottomRightRadius: sx(12) },
   bubbleLeftTab:  { borderTopLeftRadius: sx(12), borderTopRightRadius: 0,    borderBottomLeftRadius: sx(12), borderBottomRightRadius: sx(12) },
-  bubbleText: { fontFamily: 'NationalPark_500Medium', fontSize: sx(14), color: '#332d41', letterSpacing: sx(-0.14), lineHeight: sy(20) },
-  bottomContent: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: sy(21) },
-  textBlock: { alignItems: 'center', gap: sy(12) },
+  bubbleText: { fontFamily: 'NationalPark_500Medium', fontSize: sx(14), color: '#332d41', letterSpacing: -0.14, lineHeight: sy(20) },
+  bottomContent: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  textBlock: { alignItems: 'center', gap: sy(20) },
   titleRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' },
-  titleBold: { fontSize: sx(35), fontFamily: 'NationalPark_600SemiBold', color: '#1d192b', letterSpacing: sx(-1.4), lineHeight: sy(44) },
-  titleMed:  { fontSize: sx(35), fontFamily: 'NationalPark_500Medium',   color: '#1d192b', letterSpacing: sx(-1.4), lineHeight: sy(44) },
-  subtitle: { width: sx(270), fontSize: sx(16), fontFamily: 'NationalPark_500Medium', color: '#657586', textAlign: 'center', lineHeight: sy(24), letterSpacing: sx(-0.16) },
-  pagination: { flexDirection: 'row', gap: sx(8) },
-  dot: { width: sx(8), height: sx(8), borderRadius: sx(4) },
+  titleBold: { fontSize: sx(35), fontFamily: 'NationalPark_600SemiBold', color: '#1d192b', letterSpacing: -1.4, lineHeight: sy(44) },
+  titleMed:  { fontSize: sx(35), fontFamily: 'NationalPark_500Medium',   color: '#1d192b', letterSpacing: -1.4, lineHeight: sy(44) },
+  subtitle: { width: sx(270), fontSize: sx(16), fontFamily: 'NationalPark_500Medium', color: '#657586', textAlign: 'center', lineHeight: sy(24), letterSpacing: -0.16 },
 });

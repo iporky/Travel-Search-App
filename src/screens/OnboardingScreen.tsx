@@ -2,7 +2,6 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
-  Image,
   ImageSourcePropType,
   Pressable,
   StyleSheet,
@@ -11,7 +10,6 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
@@ -156,11 +154,6 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
     }
   }, [onDone]);
 
-  // Skip the intro slides and jump straight to the sign-in slide.
-  const goToSignIn = useCallback(() => {
-    flatRef.current?.scrollToIndex({ index: SIGNIN_SLIDE, animated: true });
-  }, [SIGNIN_SLIDE]);
-
   const renderItem = useCallback(
     ({ item }: { item: Slide }) => {
       // Memoized slides: `activeIndex` is passed as the slide's own index so the
@@ -208,10 +201,12 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         <Text style={styles.languageCode}>{langPrefix}</Text>
       </Pressable>
 
-      {/* Stationary pagination dots — fixed above the Get started text */}
+      {/* Stationary pagination dots. The Skip / Get started button was removed
+          (first demo release), so the dots drop down to keep proper bottom
+          alignment. */}
       {activeIndex < SIGNIN_SLIDE ? (
         <View
-          style={[styles.fixedDotsRow, { bottom: insets.bottom + sy(64) }]}
+          style={[styles.fixedDotsRow, { bottom: insets.bottom + sy(36) }]}
           pointerEvents="none"
         >
           {SLIDES.map((s, i) => (
@@ -221,16 +216,6 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
             />
           ))}
         </View>
-      ) : null}
-
-      {activeIndex < SIGNIN_SLIDE ? (
-        <Pressable
-          onPress={goToSignIn}
-          style={[styles.globalGetStartedBtn, { bottom: insets.bottom + sy(20) }]}
-          hitSlop={12}
-        >
-          <Text style={styles.globalGetStartedText}>Get started</Text>
-        </Pressable>
       ) : null}
 
       <LanguageScreen visible={showLanguage} onClose={() => setShowLanguage(false)} />
@@ -259,6 +244,10 @@ const styles = StyleSheet.create({
     fontSize: sx(13),
     color: colors.gray[900],
     letterSpacing: 0.3,
+    // Android adds asymmetric font padding that drops the text below the globe's
+    // center — remove it so "EN"/"US" sits vertically centered with the icon.
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   bottomContent: {
     position: 'absolute',
@@ -319,23 +308,5 @@ const styles = StyleSheet.create({
   },
   dotInactive: {
     backgroundColor: '#c9e3ff',
-  },
-  globalGetStartedBtn: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: sy(8),
-    zIndex: 20,
-  },
-  globalGetStartedText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(16),
-    color: colors.gray[900],
-    textAlign: 'center',
-    letterSpacing: -0.16,
-    lineHeight: sy(24),
   },
 });

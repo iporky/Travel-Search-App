@@ -4,6 +4,7 @@ import {
   Dimensions,
   Image,
   ImageSourcePropType,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import { colors, radius } from '../../theme/tokens';
 import { OnboardingQuestion } from '../../api/onboarding';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import ProgressBar from '../../components/ProgressBar';
+import { ONBOARDING_ICON_SOURCES, AVATAR_SOURCE } from '../../assets/onboardingIcons';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -22,15 +24,13 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-// Round mascot bird — used as the question-asking avatar in the bubble
-const BIRD_AVATAR = onboardingSource(
-  require('../../../assets/onboarding/avatar_container.png') as ImageSourcePropType,
-  'avatar_container',
-);
-const PLANE = onboardingSource(
-  require('../../../assets/onboarding/airplane.png') as ImageSourcePropType,
-  'airplane',
-);
+// Round mascot bird — question-asking avatar in the bubble. 512px PNG
+// (AVATAR_SOURCE) rendered with native <Image>.
+// airplane.png is a freshly-replaced PNG, so on Android load it by resource name
+// (same fix as the icons) instead of the require()-number that renders blank.
+const PLANE_MOD = require('../../../assets/onboarding/airplane.png') as ImageSourcePropType;
+const PLANE: ImageSourcePropType =
+  Platform.OS === 'android' ? { uri: 'assets_onboarding_airplane' } : PLANE_MOD;
 
 const BACK_BTN = onboardingSource(
   require('../../../assets/onboarding/chevron-left.png') as ImageSourcePropType,
@@ -38,38 +38,9 @@ const BACK_BTN = onboardingSource(
 );
 
 
-const ICONS: Record<string, ImageSourcePropType> = {
-  name_passport_4x:        onboardingSource(require('../../../assets/onboarding/name_passport_4x.png'), 'name_passport_4x'),
-  name_korea_4x:           onboardingSource(require('../../../assets/onboarding/name_korea_4x.png'), 'name_korea_4x'),
-  name_konnect_4x:         onboardingSource(require('../../../assets/onboarding/name_konnect_4x.png'), 'name_konnect_4x'),
-  name_student_4x:         onboardingSource(require('../../../assets/onboarding/name_student_4x.png'), 'name_student_4x'),
-  name_employee_4x:        onboardingSource(require('../../../assets/onboarding/name_employee_4x.png'), 'name_employee_4x'),
-  name_teacher_4x:         onboardingSource(require('../../../assets/onboarding/name_teacher_4x.png'), 'name_teacher_4x'),
-  name_entrepreneur_4x:    onboardingSource(require('../../../assets/onboarding/name_entrepreneur_4x.png'), 'name_entrepreneur_4x'),
-  name_freelancer_4x:      onboardingSource(require('../../../assets/onboarding/name_freelancer_4x.png'), 'name_freelancer_4x'),
-  name_vacation_4x:        onboardingSource(require('../../../assets/onboarding/name_vacation_4x.png'), 'name_vacation_4x'),
-  name_food_4x:            onboardingSource(require('../../../assets/onboarding/name_food_4x.png'), 'name_food_4x'),
-  name_shopping_4x:        onboardingSource(require('../../../assets/onboarding/name_shopping_4x.png'), 'name_shopping_4x'),
-  name_culture_4x:         onboardingSource(require('../../../assets/onboarding/name_culture_4x.png'), 'name_culture_4x'),
-  name_nightlife_4x:       onboardingSource(require('../../../assets/onboarding/name_nightlife_4x.png'), 'name_nightlife_4x'),
-  name_nature_4x:          onboardingSource(require('../../../assets/onboarding/name_nature_4x.png'), 'name_nature_4x'),
-  name_socialnetworking_4x:onboardingSource(require('../../../assets/onboarding/name_socialnetworking_4x.png'), 'name_socialnetworking_4x'),
-  name_solo_4x:            onboardingSource(require('../../../assets/onboarding/name_solo_4x.png'), 'name_solo_4x'),
-  name_partner_4x:         onboardingSource(require('../../../assets/onboarding/name_partner_4x.png'), 'name_partner_4x'),
-  name_friend_4x:          onboardingSource(require('../../../assets/onboarding/name_friend_4x.png'), 'name_friend_4x'),
-  name_group_4x:           onboardingSource(require('../../../assets/onboarding/name_group_4x.png'), 'name_group_4x'),
-  name_home_4x:            onboardingSource(require('../../../assets/onboarding/name_home_4x.png'), 'name_home_4x'),
-  name_busan_4x:           onboardingSource(require('../../../assets/cities/name_busan_4x.png'), 'name_busan_4x'),
-  name_seoul_4x:           onboardingSource(require('../../../assets/cities/name_seoul_4x.png'), 'name_seoul_4x'),
-  name_jeju_4x:            onboardingSource(require('../../../assets/cities/name_jeju_4x.png'), 'name_jeju_4x'),
-  name_gyeongju_4x:        onboardingSource(require('../../../assets/cities/name_gyeongju_4x.png'), 'name_gyeongju_4x'),
-  name_incheon_4x:         onboardingSource(require('../../../assets/cities/name_incheon_4x.png'), 'name_incheon_4x'),
-  name_suwon_4x:           onboardingSource(require('../../../assets/cities/name_suwon_4x.png'), 'name_suwon_4x'),
-  name_gangneung_4x:       onboardingSource(require('../../../assets/cities/name_gangneung_4x.png'), 'name_gangneung_4x'),
-  name_yeosu_4x:           onboardingSource(require('../../../assets/cities/name_yeosu_4x.png'), 'name_yeosu_4x'),
-  name_jeonju_4x:          onboardingSource(require('../../../assets/cities/name_jeonju_4x.png'), 'name_jeonju_4x'),
-  name_daegu_4x:           onboardingSource(require('../../../assets/cities/name_daegu_4x.png'), 'name_daegu_4x'),
-};
+// Questionnaire option icons are real .svg files under
+// assets/onboarding/questionnaire/, imported as react-native-svg components
+// (see onboardingIcons.ts).
 
 const CARD_GAP = sx(12);
 const CARD_W = (W - sx(40) - CARD_GAP) / 2;
@@ -131,7 +102,7 @@ export function QuestionScreen({
           <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} width={trackWidth} />
           <View style={[styles.planeWrap, { left: pct }]} pointerEvents="none">
             <View style={styles.planeGlow}>
-              <Image source={PLANE} style={styles.planeImg} />
+              <Image source={PLANE} style={styles.planeImg} resizeMode="contain" />
             </View>
           </View>
         </View>
@@ -139,7 +110,7 @@ export function QuestionScreen({
 
       {/* Question bubble — mascot bird on the left */}
       <View style={styles.bubbleRow}>
-        <Image source={BIRD_AVATAR} style={styles.birdAvatar} resizeMode="contain" />
+        <Image source={AVATAR_SOURCE} style={styles.birdAvatar} resizeMode="contain" />
         <View style={styles.bubble}>
           <Text style={styles.bubbleText}>{question.prompt}</Text>
         </View>
@@ -186,16 +157,16 @@ function renderList(
     >
       {question.options.map((opt) => {
         const isSel = selected.includes(opt.id);
-        const icon = opt.iconAsset ? ICONS[opt.iconAsset] : undefined;
+        const iconSrc = opt.iconAsset ? ONBOARDING_ICON_SOURCES[opt.iconAsset] : undefined;
         return (
           <Pressable
             key={opt.id}
             onPress={() => onToggle(opt.id)}
             style={[styles.listRow, isSel && styles.listRowSel]}
           >
-            {icon ? (
+            {iconSrc ? (
               <View style={styles.listIconWrap}>
-                <Image source={icon} style={styles.listIcon} resizeMode="contain" />
+                <Image source={iconSrc} style={styles.listIcon} resizeMode="contain" />
               </View>
             ) : null}
             <View style={styles.listTextCol}>
@@ -235,7 +206,7 @@ function renderGrid(
         <View key={ri} style={styles.gridRow}>
           {row.map((opt) => {
             const isSel = selected.includes(opt.id);
-            const icon = opt.iconAsset ? ICONS[opt.iconAsset] : undefined;
+            const iconSrc = opt.iconAsset ? ONBOARDING_ICON_SOURCES[opt.iconAsset] : undefined;
             return (
               <Pressable
                 key={opt.id}
@@ -247,10 +218,11 @@ function renderGrid(
                 ]}
               >
                 <View style={styles.gridIconWrap}>
-                  {icon ? (
+                  {iconSrc ? (
+                    // contentFit contain preserves each icon's aspect ratio.
                     <Image
-                      source={icon}
-                      style={{ width: CARD_W * 0.5, height: CARD_W * 0.45 }}
+                      source={iconSrc}
+                      style={{ width: CARD_W * 0.52, height: CARD_W * 0.52 }}
                       resizeMode="contain"
                     />
                   ) : null}
@@ -424,6 +396,11 @@ const styles = StyleSheet.create({
   },
   planeWrap: {
     position: 'absolute',
+    // The airplane PNG has ~20% transparent padding on its left, so its visible
+    // body sits well to the right of the box origin (= the progress head), leaving
+    // a gap where the dashes show through. Pull it back left so the plane sits on
+    // the fill end.
+    marginLeft: -sx(18),
     zIndex: 4,
   },
   planeGlow: {
@@ -436,8 +413,8 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   planeImg: {
-    width: sx(36),
-    height: sy(64),
+    width: sx(56),
+    height: sx(56),
     backgroundColor: 'transparent',
   },
 

@@ -3,7 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFonts, NationalPark_400Regular, NationalPark_500Medium, NationalPark_600SemiBold, NationalPark_700Bold } from '@expo-google-fonts/national-park';
+import { useFonts, NationalPark_400Regular, NationalPark_500Medium, NationalPark_600SemiBold, NationalPark_700Bold, NationalPark_800ExtraBold } from '@expo-google-fonts/national-park';
+// Freeze text at its designed size regardless of the phone's font/display
+// settings — must run before any Text/TextInput renders.
+import './src/utils/lockFontScaling';
 import './src/i18n';
 
 import { TabBar, TabKey } from './src/components/TabBar';
@@ -17,6 +20,7 @@ import { gradients } from './src/theme/tokens';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider } from './src/context/LanguageContext';
 import { preloadAppAssets } from './src/assets/preload';
+import { ScreenTransition } from './src/components/ScreenTransition';
 
 // ── Error boundary: shows the JS error on-screen instead of crashing ─────────
 class ErrorBoundary extends Component<
@@ -62,6 +66,9 @@ function AppContent() {
     completePersonalization,
   } = useAuth();
   const [tab, setTab] = useState<TabKey>('home');
+  // Buzz detail/compose screens go full-bleed (over the tab bar) so their inputs
+  // can sit flush on the keyboard.
+  const [buzzFullScreen, setBuzzFullScreen] = useState(false);
 
   // Wait for AsyncStorage to load persisted auth before rendering
   if (isLoading) return null;
@@ -71,7 +78,9 @@ function AppContent() {
     return (
       <ErrorBoundary>
         <SafeAreaProvider>
-          <OnboardingFlow onComplete={completePersonalization} />
+          <ScreenTransition transitionKey="personalize">
+            <OnboardingFlow onComplete={completePersonalization} />
+          </ScreenTransition>
           <StatusBar style="dark" />
         </SafeAreaProvider>
       </ErrorBoundary>
@@ -85,15 +94,26 @@ function AppContent() {
         <LinearGradient colors={gradients.surfaceDim} style={StyleSheet.absoluteFill} />
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
           <View style={styles.flex}>
-            {tab === 'home' && <HomeScreen />}
-            {tab === 'buzz' && <BuzzScreen />}
-            {tab === 'history' && <HistoryScreen />}
-            {tab === 'profile' && <ProfileScreen />}
+            {/* Cross-fade between tabs instead of snapping. */}
+            <ScreenTransition transitionKey={tab}>
+              {tab === 'home' && <HomeScreen />}
+              {tab === 'buzz' && <BuzzScreen onFullScreen={setBuzzFullScreen} />}
+              {tab === 'history' && <HistoryScreen />}
+              {tab === 'profile' && <ProfileScreen />}
+            </ScreenTransition>
           </View>
         </SafeAreaView>
-        <SafeAreaView edges={['bottom']}>
-          <TabBar active={tab} onChange={setTab} />
-        </SafeAreaView>
+        {!buzzFullScreen && (
+          <SafeAreaView edges={['bottom']}>
+            <TabBar
+              active={tab}
+              onChange={(k) => {
+                setBuzzFullScreen(false);
+                setTab(k);
+              }}
+            />
+          </SafeAreaView>
+        )}
         <StatusBar style="dark" />
       </SafeAreaProvider>
     );
@@ -103,10 +123,12 @@ function AppContent() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <OnboardingScreen
-          onDone={() => {/* navigation happens automatically when user signs in */}}
-          initialSignInIndex={false}
-        />
+        <ScreenTransition transitionKey="signedOut">
+          <OnboardingScreen
+            onDone={() => {/* navigation happens automatically when user signs in */}}
+            initialSignInIndex={false}
+          />
+        </ScreenTransition>
         <StatusBar style="dark" />
       </SafeAreaProvider>
     </ErrorBoundary>
@@ -119,6 +141,7 @@ export default function App() {
     NationalPark_500Medium,
     NationalPark_600SemiBold,
     NationalPark_700Bold,
+    NationalPark_800ExtraBold,
   });
   const [assetsLoaded, setAssetsLoaded] = useState(false);
 

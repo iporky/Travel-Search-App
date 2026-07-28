@@ -108,7 +108,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const [sources, setSources] = useState<SearchSource[]>([]);
   const [followups, setFollowups] = useState<string[]>([]);
   const [confidence, setConfidence] = useState<ConfidenceIndicator | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   // One session id per screen instance so follow-ups share a session.
   const sessionId = useRef(makeSessionId()).current;
@@ -136,7 +136,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
     setSources([]);
     setFollowups([]);
     setConfidence(null);
-    setError(null);
+    setError(false);
 
     const handle = streamQuery(
       {
@@ -189,7 +189,9 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
         onError: (e) => {
           setStreaming(false);
           setProgress(null);
-          setError(e.message);
+          // Show translated copy; the raw exception goes to the log, not the UI.
+          console.warn('[search] stream failed', e);
+          setError(true);
         },
       },
     );
@@ -274,7 +276,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
           {error ? (
             <View style={styles.errorCard}>
               <Ionicons name="cloud-offline-outline" size={sx(20)} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{t('search.error')}</Text>
             </View>
           ) : null}
 

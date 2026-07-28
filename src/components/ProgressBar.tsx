@@ -32,14 +32,17 @@ export default function ProgressBar({ progress = 1, dashStartProgress, width }: 
             <Stop offset="100%" stopColor="#0165FF" stopOpacity="0" />
           </LinearGradient>
 
+          {/* Barber-pole stripes — wider spacing to match the Figma design
+              (node 9435-20464): ~15px period at the same 32° forward lean,
+              instead of the old tightly-packed 6px stripes. */}
           <Pattern
             id={ids.stripes}
-            width={6}
-            height={6}
+            width={15}
+            height={15}
             patternUnits="userSpaceOnUse"
             patternTransform="rotate(32)"
           >
-            <Rect x="0" y="0" width="3" height="6" fill="rgba(255,255,255,0.52)" />
+            <Rect x="0" y="0" width="7.5" height="15" fill="rgba(255,255,255,0.5)" />
           </Pattern>
         </Defs>
 
@@ -49,7 +52,7 @@ export default function ProgressBar({ progress = 1, dashStartProgress, width }: 
           width={`${safeProgress * 100}%`}
           height="8"
           fill={`url(#${ids.gradient})`}
-          rx="2" ry="2"
+          rx="4" ry="4"
         />
         <Rect
           x="0"
@@ -58,6 +61,7 @@ export default function ProgressBar({ progress = 1, dashStartProgress, width }: 
           height="8"
           fill={`url(#${ids.stripes})`}
           opacity={0.5}
+          rx="4" ry="4"
         />
 
         {/* Remaining trail — crisp, evenly spaced line dashes (1:1 with px now,
