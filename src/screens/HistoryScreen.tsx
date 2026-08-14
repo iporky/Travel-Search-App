@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Animated,
   BackHandler,
   Pressable,
   ScrollView,
@@ -27,12 +26,12 @@ import { ActionSheetMenu } from '../components/buzz/ActionSheetMenu';
 import { HistorySearchScreen } from './history/HistorySearchScreen';
 import { ScreenTransition } from '../components/ScreenTransition';
 
-// Figma: History_Kiki Chat (10936:78060) + History_Buzz (10936:77804) +
-// scrolled state (10936:77933). One screen, two top tabs:
+// Figma: History_Kiki Chat (10936:78060) + History_Buzz (10936:77804).
+// One screen, two top tabs:
 //   • AI Chats — Sort + Time filters only
 //   • Buzz — Activity / Content / Sort / Time filters
-// Cards grouped chronologically (Today, Yesterday, Last Week); the header
-// collapses on scroll while tabs + filter bar stay pinned.
+// Cards grouped chronologically (Today, Yesterday, Last Week). Header, tabs
+// and filter bar are all fixed; only the card list scrolls beneath them.
 
 type HistoryTab = 'aiChats' | 'buzz';
 
@@ -87,14 +86,6 @@ export function HistoryScreen({ onFullScreen }: Props) {
     () => Object.fromEntries(buzzHistory.map((i) => [i.id, i.saved])),
   );
   const [menuFor, setMenuFor] = useState<string | null>(null);
-
-  // Collapsing header (Figma scrolled state): header slides away, tabs+filters pin.
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const headerShift = scrollY.interpolate({
-    inputRange: [0, HEADER_H],
-    outputRange: [0, -HEADER_H],
-    extrapolate: 'clamp',
-  });
 
   useEffect(() => onFullScreen?.(searching), [searching, onFullScreen]);
 
@@ -165,13 +156,111 @@ export function HistoryScreen({ onFullScreen }: Props) {
 
   return (
     <View style={styles.screen}>
-      <Animated.ScrollView
+      {/* Fixed top block: header + tabs + filter bar. Only the list scrolls. */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{t('history.title')}</Text>
+        <Pressable hitSlop={10} onPress={() => setSearching(true)}>
+          <Ionicons name="search" size={20} color="#0a1422" />
+        </Pressable>
+      </View>
+
+      <View style={styles.tabsWrap}>
+        <View style={styles.tabs}>
+          {(['aiChats', 'buzz'] as const).map((key) => {
+            const active = tab === key;
+            return (
+              <Pressable
+                key={key}
+                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                onPress={() => setTab(key)}
+              >
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                  {t(`history.tabs.${key}`)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+          style={styles.chipsScroll}
+        >
+          {tab === 'buzz' && (
+            <>
+              <DropdownFilter
+                label={t('history.filters.activity')}
+                valueLabel={
+                  buzzFilters.activity
+                    ? t(`history.activity.${buzzFilters.activity}`)
+                    : t('history.filters.activity')
+                }
+                active={buzzFilters.activity != null}
+                title={t('history.filters.activity')}
+                options={activityOptions}
+                selected={buzzFilters.activity}
+                clearable
+                onSelect={(v) =>
+                  setBuzzFilters((f) => ({ ...f, activity: v as BuzzActivity | null }))
+                }
+              />
+              <DropdownFilter
+                label={t('history.filters.content')}
+                valueLabel={
+                  buzzFilters.content
+                    ? t(`history.content.${buzzFilters.content}`)
+                    : t('history.filters.content')
+                }
+                active={buzzFilters.content != null}
+                title={t('history.filters.content')}
+                options={contentOptions}
+                selected={buzzFilters.content}
+                clearable
+                onSelect={(v) =>
+                  setBuzzFilters((f) => ({ ...f, content: v as BuzzContentKind | null }))
+                }
+              />
+            </>
+          )}
+          <DropdownFilter
+            label={t('history.filters.sort')}
+            valueLabel={t(
+              `history.sort.${tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}`,
+            )}
+            active={(tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort) !== 'newest'}
+            title={t('history.filters.sort')}
+            options={sortOptions}
+            selected={tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}
+            onSelect={(v) => {
+              if (!v) return;
+              if (tab === 'aiChats') setAiFilters((f) => ({ ...f, sort: v as HistorySort }));
+              else setBuzzFilters((f) => ({ ...f, sort: v as HistorySort }));
+            }}
+          />
+          <DropdownFilter
+            label={t('history.filters.time')}
+            valueLabel={t(
+              `history.time.${tab === 'aiChats' ? aiFilters.time : buzzFilters.time}`,
+            )}
+            active={(tab === 'aiChats' ? aiFilters.time : buzzFilters.time) !== 'thisYear'}
+            title={t('history.filters.time')}
+            options={timeOptions}
+            selected={tab === 'aiChats' ? aiFilters.time : buzzFilters.time}
+            onSelect={(v) => {
+              if (!v) return;
+              if (tab === 'aiChats')
+                setAiFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
+              else setBuzzFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
+            }}
+          />
+        </ScrollView>
+      </View>
+
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: true,
-        })}
-        scrollEventThrottle={16}
       >
         {groups.length === 0 ? (
           <Text style={styles.empty}>{t('history.empty')}</Text>
@@ -215,114 +304,7 @@ export function HistoryScreen({ onFullScreen }: Props) {
             </View>
           ))
         )}
-      </Animated.ScrollView>
-
-      {/* Pinned top block: header (collapses) + tabs + filter bar (stick). */}
-      <Animated.View
-        style={[styles.topBlock, { transform: [{ translateY: headerShift }] }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('history.title')}</Text>
-          <Pressable hitSlop={10} onPress={() => setSearching(true)}>
-            <Ionicons name="search" size={20} color="#0a1422" />
-          </Pressable>
-        </View>
-
-        <View style={styles.tabsWrap}>
-          <View style={styles.tabs}>
-            {(['aiChats', 'buzz'] as const).map((key) => {
-              const active = tab === key;
-              return (
-                <Pressable
-                  key={key}
-                  style={[styles.tabBtn, active && styles.tabBtnActive]}
-                  onPress={() => setTab(key)}
-                >
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                    {t(`history.tabs.${key}`)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}
-            style={styles.chipsScroll}
-          >
-            {tab === 'buzz' && (
-              <>
-                <DropdownFilter
-                  label={t('history.filters.activity')}
-                  valueLabel={
-                    buzzFilters.activity
-                      ? t(`history.activity.${buzzFilters.activity}`)
-                      : t('history.filters.activity')
-                  }
-                  active={buzzFilters.activity != null}
-                  title={t('history.filters.activity')}
-                  options={activityOptions}
-                  selected={buzzFilters.activity}
-                  clearable
-                  onSelect={(v) =>
-                    setBuzzFilters((f) => ({ ...f, activity: v as BuzzActivity | null }))
-                  }
-                />
-                <DropdownFilter
-                  label={t('history.filters.content')}
-                  valueLabel={
-                    buzzFilters.content
-                      ? t(`history.content.${buzzFilters.content}`)
-                      : t('history.filters.content')
-                  }
-                  active={buzzFilters.content != null}
-                  title={t('history.filters.content')}
-                  options={contentOptions}
-                  selected={buzzFilters.content}
-                  clearable
-                  onSelect={(v) =>
-                    setBuzzFilters((f) => ({ ...f, content: v as BuzzContentKind | null }))
-                  }
-                />
-              </>
-            )}
-            <DropdownFilter
-              label={t('history.filters.sort')}
-              valueLabel={t(
-                `history.sort.${tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}`,
-              )}
-              active={(tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort) !== 'newest'}
-              title={t('history.filters.sort')}
-              options={sortOptions}
-              selected={tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}
-              onSelect={(v) => {
-                if (!v) return;
-                if (tab === 'aiChats') setAiFilters((f) => ({ ...f, sort: v as HistorySort }));
-                else setBuzzFilters((f) => ({ ...f, sort: v as HistorySort }));
-              }}
-            />
-            <DropdownFilter
-              label={t('history.filters.time')}
-              valueLabel={t(
-                `history.time.${tab === 'aiChats' ? aiFilters.time : buzzFilters.time}`,
-              )}
-              active={(tab === 'aiChats' ? aiFilters.time : buzzFilters.time) !== 'thisYear'}
-              title={t('history.filters.time')}
-              options={timeOptions}
-              selected={tab === 'aiChats' ? aiFilters.time : buzzFilters.time}
-              onSelect={(v) => {
-                if (!v) return;
-                if (tab === 'aiChats')
-                  setAiFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
-                else setBuzzFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
-              }}
-            />
-          </ScrollView>
-        </View>
-      </Animated.View>
+      </ScrollView>
 
       <ActionSheetMenu
         visible={menuFor != null}
@@ -348,12 +330,6 @@ export function HistoryScreen({ onFullScreen }: Props) {
 const styles = StyleSheet.create({
   // Figma frame background: #f8f9fb.
   screen: { flex: 1, backgroundColor: '#f8f9fb' },
-  topBlock: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
   header: {
     height: HEADER_H,
     flexDirection: 'row',
@@ -405,8 +381,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
   },
   listContent: {
-    // Header 56 + tabs ~43 + chips 48 + breathing room.
-    paddingTop: HEADER_H + 43 + 48 + spacing[4],
+    paddingTop: spacing[4],
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[16],
     gap: spacing[6],
