@@ -98,8 +98,8 @@ function AppContent() {
             <ScreenTransition transitionKey={tab}>
               {tab === 'home' && <HomeScreen />}
               {tab === 'buzz' && <BuzzScreen onFullScreen={setBuzzFullScreen} />}
-              {tab === 'history' && <HistoryScreen />}
-              {tab === 'profile' && <ProfileScreen />}
+              {tab === 'history' && <HistoryScreen onFullScreen={setBuzzFullScreen} />}
+              {tab === 'profile' && <ProfileScreen onFullScreen={setBuzzFullScreen} />}
             </ScreenTransition>
           </View>
         </SafeAreaView>
