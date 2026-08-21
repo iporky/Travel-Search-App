@@ -1,64 +1,30 @@
-// History tab — Figma "Backend Functionality" section (node 10051:43907).
-// Two sub-tabs: AI Chats (Kiki conversations) and Buzz (saved/liked activity).
+// History tab — Figma "History for Aug release" (section 12232:59925).
+// Kiki AI questions only, listed from the backend search log
+// (GET /api/v1/search/history), with a sort chip and a time-range chip.
 
-/** Chronological bucket a history entry falls into. */
-export type HistoryGroup = 'today' | 'yesterday' | 'lastWeek' | 'older';
-
-/** Buzz content type filter values (Figma: Content ▼ Ping / Drop / Vibe). */
-export type BuzzContentKind = 'ping' | 'drop' | 'vibe';
-
-/** Buzz activity filter values (Figma: Activity ▼). */
-export type BuzzActivity = 'saved' | 'liked' | 'myPosts' | 'myComments';
-
-/** Sort options. AI Chats: newest/oldest. Buzz adds recently viewed. */
+/** Sort chip options (Figma sort sheet: Newest / Oldest / Recently Viewed). */
 export type HistorySort = 'newest' | 'oldest' | 'recentlyViewed';
 
-/** Time-range options (Figma: Today → All Time). */
-export type HistoryTimeRange =
-  | 'today'
-  | 'last7'
-  | 'last30'
-  | 'last3m'
-  | 'last6m'
-  | 'thisYear'
-  | 'allTime';
+/** Time-range chip options (Figma date sheet: Today / Last 7 days / Last 30 days / All Time). */
+export type HistoryTimeRange = 'today' | 'last7' | 'last30' | 'allTime';
 
-export interface AiChatHistoryItem {
+export const HISTORY_SORTS: HistorySort[] = ['newest', 'oldest', 'recentlyViewed'];
+export const HISTORY_TIME_RANGES: HistoryTimeRange[] = ['today', 'last7', 'last30', 'allTime'];
+
+/** One question the user asked Kiki (a row in the History list). */
+export interface SearchHistoryItem {
+  /** The tracking_events document id (stringified Mongo _id). */
   id: string;
-  /** Conversation title — the question the user asked Kiki. */
-  title: string;
-  /** Relative time shown in the meta row, e.g. "2:14 PM", "Yesterday". */
-  time: string;
-  group: HistoryGroup;
-  liked: boolean;
-  /** Number of messages in the conversation (meta row). */
-  messages: number;
+  /** The question as typed. */
+  user_query: string;
+  /** ISO timestamp (UTC) the search was received. */
+  started_at: string;
 }
 
-export interface BuzzHistoryItem {
-  id: string;
-  kind: BuzzContentKind;
-  /** Category label, e.g. "Living", "Food" (Figma search card shows "Living"). */
-  category: string;
-  title: string;
-  author: string;
-  time: string;
-  location: string;
-  group: HistoryGroup;
-  liked: boolean;
-  saved: boolean;
-  /** How this item entered history (drives the Activity filter). */
-  activity: BuzzActivity;
-}
-
-export interface BuzzHistoryFilters {
-  activity: BuzzActivity | null;
-  content: BuzzContentKind | null;
+export interface HistoryFilters {
   sort: HistorySort;
   time: HistoryTimeRange;
 }
 
-export interface AiChatFilters {
-  sort: HistorySort;
-  time: HistoryTimeRange;
-}
+/** Design defaults: sort Newest, date filter All time. */
+export const DEFAULT_HISTORY_FILTERS: HistoryFilters = { sort: 'newest', time: 'allTime' };

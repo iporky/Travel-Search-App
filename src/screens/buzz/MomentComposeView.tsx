@@ -40,8 +40,7 @@ export function MomentComposeView({ initial, editing, onBack, onSubmit }: Props)
   const back = () => (dirty && !editing ? setConfirmLeave(true) : onBack());
 
   const pickPhotos = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    // System photo picker — no media permission needed.
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,

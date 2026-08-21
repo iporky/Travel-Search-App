@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { useLanguage } from '../../context/LanguageContext';
@@ -9,6 +10,13 @@ type Props = {
   selected: number | null;
   /** Receives the day plus a localized label for display elsewhere. */
   onSelect: (day: number, label: string) => void;
+  /** Month to display (0-based) — defaults to the current month. */
+  year?: number;
+  month?: number;
+  /** When given, ‹ › chevrons appear next to the month label to page months. */
+  onChangeMonth?: (delta: 1 | -1) => void;
+  /** Days before today are shown muted (and not selectable). */
+  disablePast?: boolean;
 };
 
 /**
@@ -26,14 +34,23 @@ function safeFormat(locale: string, options: Intl.DateTimeFormatOptions, date: D
 // Figma: "Select date" calendar (FilterSheet / create date, node 11478:76763).
 // Month names, weekday initials and the selected-date label all come from Intl,
 // so they follow the app language instead of being hardcoded English.
-export function MiniCalendar({ selected, onSelect }: Props) {
+export function MiniCalendar({
+  selected,
+  onSelect,
+  year: yearProp,
+  month: monthProp,
+  onChangeMonth,
+  disablePast,
+}: Props) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const locale = language.voiceLocale;
 
   const today = useMemo(() => new Date(), []);
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const year = yearProp ?? today.getFullYear();
+  const month = monthProp ?? today.getMonth();
+  const todayStamp = today.getFullYear() * 10000 + today.getMonth() * 100 + today.getDate();
+  const isPast = (day: number) => disablePast === true && year * 10000 + month * 100 + day < todayStamp;
 
   const monthLabel = useMemo(
     () =>
@@ -79,7 +96,19 @@ export function MiniCalendar({ selected, onSelect }: Props) {
   return (
     <View style={styles.card}>
       <Text style={styles.label}>{t('vibes.selectDate')}</Text>
-      <Text style={styles.month}>{monthLabel}</Text>
+      <View style={styles.monthRow}>
+        <Text style={styles.month}>{monthLabel}</Text>
+        {onChangeMonth && (
+          <View style={styles.nav}>
+            <Pressable style={styles.navBtn} hitSlop={6} onPress={() => onChangeMonth(-1)}>
+              <Ionicons name="chevron-back" size={18} color={colors.gray[900]} />
+            </Pressable>
+            <Pressable style={styles.navBtn} hitSlop={6} onPress={() => onChangeMonth(1)}>
+              <Ionicons name="chevron-forward" size={18} color={colors.gray[900]} />
+            </Pressable>
+          </View>
+        )}
+      </View>
       <View style={styles.dowRow}>
         {weekdays.map((d, i) => (
           <Text key={i} style={styles.dow}>
@@ -90,16 +119,17 @@ export function MiniCalendar({ selected, onSelect }: Props) {
       <View style={styles.grid}>
         {cells.map((day, i) => {
           const active = day != null && day === selected;
+          const past = day != null && isPast(day);
           return (
             <Pressable
               key={i}
               style={styles.cell}
-              disabled={day == null}
+              disabled={day == null || past}
               onPress={() => day != null && onSelect(day, labelFor(day))}
             >
               {day != null && (
                 <View style={[styles.dayCircle, active && styles.dayActive]}>
-                  <Text style={[styles.dayText, active && styles.dayTextActive]}>{day}</Text>
+                  <Text style={[styles.dayText, past && styles.dayTextPast, active && styles.dayTextActive]}>{day}</Text>
                 </View>
               )}
             </Pressable>
@@ -125,6 +155,16 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 0.5,
     color: colors.gray[800],
+  },
+  monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nav: { flexDirection: 'row', gap: spacing[1] },
+  navBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface.default,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   month: {
     fontFamily: 'NationalPark_700Bold',
@@ -157,5 +197,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.gray[1300],
   },
+  dayTextPast: { color: colors.gray[600] },
   dayTextActive: { color: colors.surface.default, fontFamily: 'NationalPark_600SemiBold' },
 });

@@ -1,173 +1,106 @@
-import React, { useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { colors, radius, spacing } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
+import { useAuth } from '../../context/AuthContext';
 import { ConfirmDialog } from '../../components/buzz/ConfirmDialog';
-import { FilterSelectSheet } from '../../components/history/FilterChips';
-import { DarkButton, P, SubHeader } from '../../components/profile/ProfileUI';
-import { KeyboardStickyView } from '../../components/KeyboardStickyView';
+import { FormField, PrimaryButton, SectionTitle, TopBar } from '../../components/profile/ProfileUI';
+import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
+import { submitFeedback } from '../../api/feedback';
+import { track } from '../../api/tracking';
 
-// Figma annotation (10978:93904): Contact Us — Subject, Description, Category,
-// all required; Loading / Success / Failure states. (No dedicated frame in the
-// section, so this follows the Feedback screen's form language.)
+// Figma "Profile_Setting_ContactUs" (12276:94100): TopBar "Contact Us",
+// heading "How can we help?", fields Name / Email / Comment (white inputs,
+// radius 12, px 20 / py 16), bottom CTA "Send message" (accent, 56, radius 20).
+// Submits through the same feedbacks endpoint the web app uses, flagged
+// `feedback_reply: true` so the team replies to the given email.
 
 type Props = { onBack: () => void };
 
-const CATEGORY_VALUES = ['general', 'account', 'bug', 'other'] as const;
-
 export function ContactUsScreen({ onBack }: Props) {
   const { t } = useTranslation();
-  const [subject, setSubject] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const { user } = useAuth();
+  // Edge-to-edge Android never resizes the window: lift the CTA over the keyboard.
+  const keyboardHeight = useKeyboardHeight();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [result, setResult] = useState<'sent' | 'failed' | null>(null);
 
-  const valid = subject.trim() && description.trim() && category;
+  useEffect(() => {
+    if (user?.name && !name) setName(user.name);
+    if (user?.email && !email) setEmail(user.email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.name, user?.email]);
 
-  const submit = () => {
-    if (!valid) return;
+  const canSend = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email.trim()) && comment.trim().length > 0;
+
+  const send = async () => {
+    if (!canSend || sending) return;
     setSending(true);
-    // No support API yet — simulate loading, then acknowledge.
-    setTimeout(() => {
+    try {
+      await submitFeedback({
+        type: 'suggest',
+        details: `[Contact Us] ${name.trim()}\n\n${comment.trim()}`,
+        userEmail: email.trim(),
+        reply: true,
+      });
+      track.feedbackSubmitted('contact');
+      setResult('sent');
+    } catch (e: any) {
+      console.warn('[ContactUs] send failed', e?.message ?? e);
+      setResult('failed');
+    } finally {
       setSending(false);
-      setSent(true);
-    }, 700);
+    }
   };
 
   return (
-    <KeyboardStickyView style={styles.screen}>
-      <SubHeader title={t('settings.contactUs')} onBack={onBack} />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.field}>
-          <Text style={styles.label}>{t('contact.subject')}</Text>
-          <TextInput
-            style={styles.input}
-            value={subject}
-            onChangeText={setSubject}
-            placeholder={t('contact.subjectPlaceholder')}
-            placeholderTextColor={P.textFaint}
+    <View style={[styles.screen, { paddingBottom: keyboardHeight }]}>
+      <TopBar title={t('contact.title')} onBack={onBack} />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <SectionTitle>{t('contact.heading')}</SectionTitle>
+        <View style={styles.fields}>
+          <FormField label={t('contact.name')} value={name} onChangeText={setName} placeholder={t('contact.namePlaceholder')} />
+          <FormField
+            label={t('contact.email')}
+            value={email}
+            onChangeText={setEmail}
+            placeholder={t('contact.emailPlaceholder')}
+            keyboardType="email-address"
           />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>{t('contact.category')}</Text>
-          <Pressable style={styles.select} onPress={() => setPickerOpen(true)}>
-            <Text style={category ? styles.selectValue : styles.selectPlaceholder}>
-              {category ? t(`contact.categories.${category}`) : t('contact.categoryPlaceholder')}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color={P.textMuted} />
-          </Pressable>
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>{t('contact.description')}</Text>
-          <TextInput
-            style={styles.textarea}
-            value={description}
-            onChangeText={setDescription}
-            placeholder={t('contact.descriptionPlaceholder')}
-            placeholderTextColor={P.textFaint}
+          <FormField
+            label={t('contact.comment')}
+            value={comment}
+            onChangeText={setComment}
+            placeholder={t('contact.commentPlaceholder')}
             multiline
-            textAlignVertical="top"
           />
         </View>
-
-        <DarkButton
-          label={sending ? t('contact.sending') : t('contact.send')}
-          onPress={submit}
-          disabled={!valid}
-          loading={sending}
-        />
       </ScrollView>
-
-      <FilterSelectSheet
-        visible={pickerOpen}
-        title={t('contact.category')}
-        options={CATEGORY_VALUES.map((v) => ({ value: v, label: t(`contact.categories.${v}`) }))}
-        selected={category}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(v) => {
-          setCategory(v);
-          setPickerOpen(false);
-        }}
-      />
+      <View style={styles.bottomBar}>
+        <PrimaryButton label={sending ? t('contact.sending') : t('contact.send')} onPress={send} disabled={!canSend} loading={sending} />
+      </View>
 
       <ConfirmDialog
-        visible={sent}
-        title={t('contact.sentTitle')}
-        body={t('contact.sentBody')}
-        confirmLabel={t('common.confirm')}
+        visible={result != null}
+        title={result === 'sent' ? t('contact.sentTitle') : t('contact.failedTitle')}
+        body={result === 'sent' ? t('contact.sentBody') : t('contact.failedBody')}
+        confirmLabel={t('common.done')}
         onConfirm={() => {
-          setSent(false);
-          onBack();
+          const ok = result === 'sent';
+          setResult(null);
+          if (ok) onBack();
         }}
       />
-    </KeyboardStickyView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.gray[100] },
-  content: { paddingHorizontal: spacing[4], paddingBottom: 96, gap: spacing[5] },
-  field: { gap: spacing[2] },
-  label: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 14,
-    color: P.textDark,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[3],
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 14,
-    color: P.textDark,
-  },
-  select: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[3],
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectValue: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 14,
-    color: P.textDark,
-  },
-  selectPlaceholder: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 14,
-    color: P.textFaint,
-  },
-  textarea: {
-    minHeight: 120,
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.sm,
-    padding: spacing[3],
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: 14,
-    lineHeight: 20,
-    color: P.textDark,
-  },
+  screen: { flex: 1 },
+  content: { paddingHorizontal: spacing[5], paddingTop: spacing[3], paddingBottom: spacing[8], gap: spacing[5] },
+  fields: { gap: spacing[3] },
+  bottomBar: { paddingHorizontal: spacing[5], paddingTop: spacing[4], paddingBottom: spacing[4] },
 });

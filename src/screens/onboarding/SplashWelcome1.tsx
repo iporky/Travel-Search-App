@@ -23,7 +23,6 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const LOGO       = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const CLOUD      = onboardingSource(require('../../../assets/onboarding/signup/screen1/cloud.png') as ImageSourcePropType, 'signup-s1-cloud');
 // Birds are inline SVGs (screen1Birds.ts) rendered via SvgXml — the raster
 // bird PNGs fail to decode through <Image> on release (see project memory).
@@ -204,12 +203,7 @@ export function SplashWelcome1({ onPress, active = true }: Props) {
         <SvgXml xml={MAIN_BIRD_SVG} width={sx(230)} height={sy(180)} />
       </Animated.View>
 
-      {/* Logo */}
-      <Image
-        source={LOGO}
-        resizeMode="contain"
-        style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15), zIndex: 10 }}
-      />
+      {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bottom text */}
       <View style={[styles.bottomContent, { bottom: sy(129) }]}>

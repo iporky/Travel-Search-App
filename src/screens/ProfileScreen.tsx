@@ -1,138 +1,82 @@
-import React, { useEffect, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
-import { useAuth } from '../context/AuthContext';
-import { saveProfileExtras } from '../utils/profileExtras';
+import React, { useRef, useEffect, useState } from 'react';
+import { BackHandler } from 'react-native';
 import { ScreenTransition } from '../components/ScreenTransition';
 import { ProfileMain } from './profile/ProfileMain';
-import { SettingsScreen } from './profile/SettingsScreen';
-import { NotificationSettingsScreen } from './profile/NotificationSettingsScreen';
-import { PrivacySettingsScreen } from './profile/PrivacySettingsScreen';
+import { SettingsScreen, SettingsSubView } from './profile/SettingsScreen';
 import { ContactUsScreen } from './profile/ContactUsScreen';
 import { FeedbackScreen } from './profile/FeedbackScreen';
 import { LegalScreen } from './profile/LegalScreen';
-import { VerifyFlow } from './profile/VerifyFlow';
 
-// Profile tab router (Figma "Backend Functionality" profile flow):
-// Profile → Settings → { Notifications, Privacy Settings, Contact, Feedback,
-// Terms, Privacy Policy }, plus the phone/email verification flow launched
-// from the identity card.
+// Profile tab router — Figma "Profile for Aug release" (section 12276:93796):
+// Profile → Settings → { Contact us, Feedback, Privacy Policy, About Us }.
+// Account actions (sign out / sign out all / delete) are dialogs on Settings.
 
-type SubView =
-  | 'notifications'
-  | 'privacySettings'
-  | 'contact'
-  | 'feedback'
-  | 'terms'
-  | 'privacyPolicy';
-
-type ProfileView = 'main' | 'settings' | SubView;
+type ProfileView = 'main' | 'settings' | SettingsSubView;
 
 type Props = {
-  /** Report when a full-bleed flow (verification) is open → hide the tab bar. */
+  /** Kept for the App shell; the profile flow has no full-bleed sub-views now. */
   onFullScreen?: (full: boolean) => void;
+  /** About-page CTAs: jump to the Home tab (optionally running a search). */
+  onNavigateHome?: (searchQuery?: string) => void;
 };
 
-export function ProfileScreen({ onFullScreen }: Props) {
-  const { user } = useAuth();
+export function ProfileScreen({ onFullScreen, onNavigateHome }: Props) {
   const [view, setView] = useState<ProfileView>('main');
-  const [verify, setVerify] = useState<'phone' | 'email' | null>(null);
-  // Bumped after verification writes extras so ProfileMain reloads them.
-  const [extrasVersion, setExtrasVersion] = useState(0);
+  // 'push' when drilling in, 'pop' when backing out — drives the slide direction.
+  const dirRef = useRef<'push' | 'pop'>('push');
+  const go = (next: ProfileView, dir: 'push' | 'pop' = 'push') => {
+    dirRef.current = dir;
+    setView(next);
+  };
 
-  useEffect(() => onFullScreen?.(verify != null), [verify, onFullScreen]);
+  useEffect(() => onFullScreen?.(false), [onFullScreen]);
 
   // Android hardware back pops one level instead of leaving the app.
   useEffect(() => {
-    if (view === 'main' && verify == null) return;
+    if (view === 'main') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (verify != null) setVerify(null);
-      else if (view === 'settings') setView('main');
-      else setView('settings');
+      if (view === 'settings') go('main', 'pop');
+      else go('settings', 'pop');
       return true;
     });
     return () => sub.remove();
-  }, [view, verify]);
-
-  if (verify != null) {
-    return (
-      <ScreenTransition transitionKey={`verify-${verify}`} mode="push">
-        <VerifyFlow
-          mode={verify}
-          onCancel={() => setVerify(null)}
-          onComplete={async (mode, value) => {
-            const uid = user?.id ?? 'anon';
-            if (mode === 'phone') {
-              await saveProfileExtras(uid, { phone: value, phoneVerified: true });
-            } else {
-              await saveProfileExtras(uid, { backupEmail: value });
-            }
-            setExtrasVersion((v) => v + 1);
-            setVerify(null);
-          }}
-        />
-      </ScreenTransition>
-    );
-  }
+  }, [view]);
 
   if (view === 'settings') {
     return (
-      <ScreenTransition transitionKey="settings" mode="push">
-        <SettingsScreen onBack={() => setView('main')} onOpen={setView} />
-      </ScreenTransition>
-    );
-  }
-
-  if (view === 'notifications') {
-    return (
-      <ScreenTransition transitionKey="notifications" mode="push">
-        <NotificationSettingsScreen onBack={() => setView('settings')} />
-      </ScreenTransition>
-    );
-  }
-
-  if (view === 'privacySettings') {
-    return (
-      <ScreenTransition transitionKey="privacySettings" mode="push">
-        <PrivacySettingsScreen onBack={() => setView('settings')} />
+      <ScreenTransition transitionKey="settings" mode={dirRef.current}>
+        <SettingsScreen onBack={() => go('main', 'pop')} onOpen={(v) => go(v)} />
       </ScreenTransition>
     );
   }
 
   if (view === 'contact') {
     return (
-      <ScreenTransition transitionKey="contact" mode="push">
-        <ContactUsScreen onBack={() => setView('settings')} />
+      <ScreenTransition transitionKey="contact" mode={dirRef.current}>
+        <ContactUsScreen onBack={() => go('settings', 'pop')} />
       </ScreenTransition>
     );
   }
 
   if (view === 'feedback') {
     return (
-      <ScreenTransition transitionKey="feedback" mode="push">
-        <FeedbackScreen onBack={() => setView('settings')} />
+      <ScreenTransition transitionKey="feedback" mode={dirRef.current}>
+        <FeedbackScreen onBack={() => go('settings', 'pop')} />
       </ScreenTransition>
     );
   }
 
-  if (view === 'terms' || view === 'privacyPolicy') {
+  if (view === 'privacyPolicy' || view === 'about') {
     return (
-      <ScreenTransition transitionKey={view} mode="push">
-        <LegalScreen kind={view} onBack={() => setView('settings')} />
+      <ScreenTransition transitionKey={view} mode={dirRef.current}>
+        <LegalScreen kind={view} onBack={() => go('settings', 'pop')} onNavigateHome={onNavigateHome} />
       </ScreenTransition>
     );
   }
 
   return (
-    <View style={styles.flex}>
-      <ProfileMain
-        key={`main-${extrasVersion}`}
-        onOpenSettings={() => setView('settings')}
-        onStartVerify={setVerify}
-      />
-    </View>
+    <ScreenTransition transitionKey="profile-main" mode={dirRef.current}>
+      <ProfileMain onOpenSettings={() => go('settings')} />
+    </ScreenTransition>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-});

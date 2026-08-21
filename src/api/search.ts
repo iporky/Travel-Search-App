@@ -1,8 +1,12 @@
 /**
  * search.ts — LIVE streaming query endpoint.
  *
- *   POST https://dev.konnect.kr/query/stream
- *   headers: { accept: application/json, Content-Type: application/json }
+ *   POST ${SEARCH_API_URL}/query/stream        (test.konnect.kr)
+ *   headers: { accept: application/json, Content-Type: application/json,
+ *              Authorization: Bearer <firebase id token> }
+ *   The gateway rate-limits unauthenticated calls as the "anonymous" tier
+ *   (5 searches, then 403 access_denied), so the signed-in user's Firebase
+ *   token is always attached.
  *   body: { email, metadata: { source }, min_similarity, output_language,
  *           query, session_id, top_k, user_lat, user_lng }
  *
@@ -17,6 +21,8 @@
  * scanner (robust to both NDJSON and concatenated pretty-printed objects).
  */
 
+import { Platform } from 'react-native';
+import auth from '@react-native-firebase/auth';
 import { SEARCH_API_URL } from '../config';
 
 // ── Event payload types (the subset the UI renders) ─────────────────────────
@@ -181,13 +187,9 @@ export function streamQuery(
     user_lng: args.userLng ?? 126.978,
   };
 
-  console.log('[api] streamQuery → POST /query/stream', body.query);
+  console.log(`[api] streamQuery → POST ${SEARCH_API_URL}/query/stream`, body.query);
 
-  xhr.open('POST', `${SEARCH_API_URL}/query/stream`);
-  xhr.setRequestHeader('accept', 'application/json');
-  xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.timeout = 90_000; // the pipeline can take ~15-30s; leave generous headroom
-
   xhr.onprogress = pump;
   xhr.onload = () => {
     pump();
@@ -195,13 +197,32 @@ export function streamQuery(
       console.log('[api] streamQuery ✓ complete');
       finish();
     } else {
+      // Surface the gateway's message (e.g. anonymous-tier limit) in the log.
+      console.warn('[api] streamQuery ✗', xhr.status, String(xhr.responseText ?? '').slice(0, 200));
       finish(new Error(`Search failed: HTTP ${xhr.status}`));
     }
   };
   xhr.onerror = () => finish(new Error('Network error — could not reach search service'));
   xhr.ontimeout = () => finish(new Error('Search timed out'));
 
-  xhr.send(JSON.stringify(body));
+  // The Firebase token is async; open + send once it resolves (or without it
+  // for a signed-out caller). A cancel() before then just never sends.
+  const fbUser = auth().currentUser;
+  const tokenP: Promise<string | null> = fbUser
+    ? fbUser.getIdToken().catch(() => null)
+    : Promise.resolve(null);
+  tokenP.then((token) => {
+    if (finished) return;
+    // Identical to the deployed web app (test.konnect.kr bundle → POST
+    // https://test.konnect.kr/query/stream): authenticated calls add
+    // ?platform=, anonymous calls stay bare.
+    const url = `${SEARCH_API_URL}/query/stream${token ? `?platform=${Platform.OS}` : ''}`;
+    xhr.open('POST', url);
+    xhr.setRequestHeader('accept', 'application/json');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.send(JSON.stringify(body));
+  });
 
   return {
     cancel: () => {

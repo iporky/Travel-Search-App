@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -40,11 +39,7 @@ export function DropComposeView({
   const [caption, setCaption] = useState(initialCaption);
 
   const pickPhotos = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(t('drops.permissionTitle'), t('drops.permissionBody'));
-      return;
-    }
+    // System photo picker — no media permission needed.
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,

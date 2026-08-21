@@ -1,12 +1,28 @@
-export const API_BASE_URL = 'https://api.konnect.app';
+/**
+ * All backend traffic goes to the single test environment.
+ * (Search streaming used to hit dev.konnect.kr and mocked APIs pointed at
+ * api.konnect.app — consolidated here so nothing leaks to another host.)
+ */
+export const API_HOST = 'https://test.konnect.kr';
+
+export const API_BASE_URL = API_HOST;
 /** Live streaming search backend (POST /query/stream). */
-export const SEARCH_API_URL = 'https://dev.konnect.kr';
-/** Auth backend (POST /api/v1/auth/sso/verify-firebase). */
-export const AUTH_API_URL = 'https://test.konnect.kr';
+export const SEARCH_API_URL = API_HOST;
+/** Auth / profile / onboarding / events (/api/v1/...). */
+export const AUTH_API_URL = API_HOST;
 /** Non-search APIs (users, community, content) are still mocked. */
 export const USE_MOCKS = true;
+
+/**
+ * TESTING ONLY — forces the full onboarding flow (intro → username/photo →
+ * questions) on every launch and sign-in, even for users who already have a
+ * backend profile. Flip to false to restore the normal once-per-user behavior.
+ */
+export const FORCE_ONBOARDING = true;
 
 export const STORAGE_KEYS = {
   PERSONALIZATION_PREFIX: 'konnect_personalized_',
   PROFILE_NAME_PREFIX: 'konnect_profile_name_',
+  /** History tab — local "recently viewed" ledger (row id → epoch ms). */
+  HISTORY_VIEWED: 'konnect_history_viewed',
 };

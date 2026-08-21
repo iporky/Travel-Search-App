@@ -118,19 +118,14 @@ export function ProfileSetupScreen({
                 quality: 0.85,
               });
             })()
-          : await (async () => {
-              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (!perm.granted) {
-                Alert.alert(t('onboarding.photosNeededTitle'), t('onboarding.photosNeededBody'));
-                return null;
-              }
-              return ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.85,
-              });
-            })();
+          : // System photo picker — no media permission needed (Play's
+            // photo/video permissions policy: READ_MEDIA_IMAGES is not declared).
+            await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.85,
+            });
 
       if (result && !result.canceled && result.assets?.[0]?.uri) {
         setPickedPhoto(result.assets[0].uri);

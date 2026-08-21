@@ -56,6 +56,10 @@ export const colors = {
     focus: '#c9e3ff',
     soft: '#eaf4ff',
     subtle: '#eaefff',
+    /** Card surface ("semantic-surface-button") — Profile / Settings cards. */
+    card: '#fefefe',
+    /** Hairline divider inside profile cards (Figma #ebf3ff @ 70%). */
+    line: '#ebf3ff',
   },
 };
 

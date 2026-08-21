@@ -36,6 +36,8 @@ import { onboardingSource } from '../../assets/onboardingAssets';
 import { QuestionScreen } from './QuestionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
 import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
+import { FORCE_ONBOARDING } from '../../config';
+import { ScreenTransition } from '../../components/ScreenTransition';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -79,6 +81,9 @@ export function OnboardingFlow({ onComplete }: Props) {
   // Start with Flow A default; branch after purpose is answered
   const [questionList, setQuestionList] = useState<OnboardingQuestion[]>(FLOW_A_QUESTIONS);
   const [step, setStep] = useState(0);
+  // Which way the next screen should enter from — 'push' when advancing,
+  // 'pop' when going back — so the transition matches the navigation.
+  const dirRef = useRef<'push' | 'pop'>('push');
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
 
   // Tracks whether a backend record already exists for this email + device.
@@ -97,7 +102,9 @@ export function OnboardingFlow({ onComplete }: Props) {
     fetchProfile()
       .then((profile) => {
         if (cancelled) return;
-        if (profile?.username) setSkipProfile(true);
+        // TESTING: FORCE_ONBOARDING keeps the username screen in the flow even
+        // when the backend already has one (it arrives prefilled for editing).
+        if (!FORCE_ONBOARDING && profile?.username) setSkipProfile(true);
       })
       .catch(() => {});
     return () => {
@@ -200,6 +207,7 @@ export function OnboardingFlow({ onComplete }: Props) {
   };
 
   const handleBack = () => {
+    dirRef.current = 'pop';
     if (step > 0) setStep((s) => s - 1);
   };
 
@@ -214,7 +222,10 @@ export function OnboardingFlow({ onComplete }: Props) {
     body = (
       <ProfileSetupScreen
         progress={0.06}
-        onBack={() => setPhase('intro')}
+        onBack={() => {
+          dirRef.current = 'pop';
+          setPhase('intro');
+        }}
         onConfirm={async (username, photoUri) => {
           try {
             await saveProfile({ name: username, photoUri: photoUri ?? undefined });
@@ -284,7 +295,17 @@ export function OnboardingFlow({ onComplete }: Props) {
         end={{ x: 0.5, y: 1 }}
       />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
-        {body}
+        {/* Every phase/step change slides in (forward) or back (pop) rather than
+            snapping — same motion language as the rest of the app. */}
+        <ScreenTransition
+          transitionKey={`${phase}-${step}`}
+          mode={dirRef.current}
+          onTransitionEnd={() => {
+            dirRef.current = 'push';
+          }}
+        >
+          {body}
+        </ScreenTransition>
       </SafeAreaView>
     </View>
   );

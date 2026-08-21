@@ -32,7 +32,6 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const LOGO          = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const ICON_APPLE    = onboardingSource(require('../../../assets/auth/apple.png') as ImageSourcePropType, 'apple');
 // Crisp vector Google "G" (the raster PNG looked pixelated).
 const GOOGLE_SVG = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><mask id="m0" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20"><path d="M20 0H0V20H20V0Z" fill="white"/></mask><g mask="url(#m0)"><path d="M19.6 10.2273C19.6 9.51822 19.5364 8.83642 19.4182 8.18182H10V12.05H15.3818C15.15 13.3 14.4455 14.3591 13.3864 15.0682V17.5773H16.6182C18.5091 15.8364 19.6 13.2727 19.6 10.2273Z" fill="#4285F4"/><path d="M9.99988 20C12.6999 20 14.9635 19.1045 16.618 17.5773L13.3862 15.0682C12.4908 15.6682 11.3453 16.0227 9.99988 16.0227C7.39528 16.0227 5.19078 14.2636 4.40438 11.9H1.06348V14.4909C2.70898 17.7591 6.09078 20 9.99988 20Z" fill="#34A853"/><path d="M4.4045 11.9C4.2045 11.3 4.0909 10.6591 4.0909 9.99999C4.0909 9.34089 4.2045 8.69999 4.4045 8.09999V5.50909H1.0636C0.3864 6.85909 0 8.38639 0 9.99999C0 11.6136 0.3864 13.1409 1.0636 14.4909L4.4045 11.9Z" fill="#FBBC04"/><path d="M9.99988 3.9773C11.468 3.9773 12.7862 4.4818 13.8226 5.4727L16.6908 2.6045C14.959 0.9909 12.6953 0 9.99988 0C6.09078 0 2.70898 2.2409 1.06348 5.5091L4.40438 8.1C5.19078 5.7364 7.39528 3.9773 9.99988 3.9773Z" fill="#E94235"/></g></svg>`;
@@ -179,7 +178,7 @@ export function SignIn({ onPress, active }: Props) {
       </View>
 
       {/* Logo */}
-      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15), zIndex: 10 }} resizeMode="contain" />
+      {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bird + title/subtitle, anchored in the upper-middle of the screen. */}
       <View style={styles.topContent} pointerEvents="none">

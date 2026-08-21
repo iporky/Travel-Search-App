@@ -1,0 +1,31 @@
+import { ImageSourcePropType, Platform } from 'react-native';
+
+// History tab assets (Figma "History for Aug release", section 12232:59925).
+// SVGs are the exact Figma exports; the empty-state bird is the exported PNG
+// under assets/mascot/bird-empty.png (1064×792, untouched).
+
+/** Suggestion Chip/L trailing icon — `weui:arrow-filled`, 12×24. */
+export const HISTORY_ROW_ARROW_SVG = `<svg width="12" height="24" viewBox="0 0 12 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M10.157 12.711L5.207 17.661C4.81654 18.0515 4.18347 18.0515 3.793 17.661C3.40253 17.2705 3.40253 16.6375 3.793 16.247L7.68245 12.3576C7.87771 12.1623 7.87771 11.8457 7.68245 11.6504L3.793 7.761C3.40254 7.37054 3.40253 6.73747 3.793 6.347C4.18347 5.95653 4.81653 5.95653 5.207 6.347L10.157 11.297C10.3445 11.4845 10.4498 11.7388 10.4498 12.004C10.4498 12.2692 10.3445 12.5235 10.157 12.711Z" fill="#657586"/>
+</svg>`;
+
+/** Filter chip caret — Onboarding/Selection/Chip "Vector Container" (6×10, rotated 90° → points down). */
+export const HISTORY_CHIP_CARET_SVG = `<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(10 0) rotate(90)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M5.76144 5.42399L1.72819 9.45724C1.41004 9.77539 0.894213 9.77539 0.576062 9.45724C0.257912 9.13909 0.257912 8.62327 0.576062 8.30512L3.6797 5.20148C3.87496 5.00622 3.87496 4.68964 3.6797 4.49437L0.576063 1.39074C0.257912 1.07259 0.257912 0.556763 0.576062 0.238613C0.894213 -0.0795375 1.41004 -0.0795377 1.72819 0.238613L5.76144 4.27186C5.91419 4.42466 6 4.63187 6 4.84793C6 5.06398 5.91419 5.27119 5.76144 5.42399Z" fill="#505D6D"/>
+</g>
+</svg>`;
+
+/** "No matching results" icon — Google Icons `error` (44×44, red). */
+export const HISTORY_ALERT_SVG = `<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M23.3063 30.6396C23.6576 30.2882 23.8333 29.8528 23.8333 29.3333C23.8333 28.8139 23.6576 28.3785 23.3063 28.0271C22.9549 27.6757 22.5194 27.5 22 27.5C21.4806 27.5 21.0451 27.6757 20.6938 28.0271C20.3424 28.3785 20.1667 28.8139 20.1667 29.3333C20.1667 29.8528 20.3424 30.2882 20.6938 30.6396C21.0451 30.991 21.4806 31.1667 22 31.1667C22.5194 31.1667 22.9549 30.991 23.3063 30.6396ZM20.1667 23.8333H23.8333V12.8333H20.1667V23.8333ZM22 40.3333C19.4639 40.3333 17.0806 39.8521 14.85 38.8896C12.6194 37.9271 10.6792 36.6208 9.02917 34.9708C7.37917 33.3208 6.07292 31.3806 5.11042 29.15C4.14792 26.9194 3.66667 24.5361 3.66667 22C3.66667 19.4639 4.14792 17.0806 5.11042 14.85C6.07292 12.6194 7.37917 10.6792 9.02917 9.02917C10.6792 7.37917 12.6194 6.07292 14.85 5.11042C17.0806 4.14792 19.4639 3.66667 22 3.66667C24.5361 3.66667 26.9194 4.14792 29.15 5.11042C31.3806 6.07292 33.3208 7.37917 34.9708 9.02917C36.6208 10.6792 37.9271 12.6194 38.8896 14.85C39.8521 17.0806 40.3333 19.4639 40.3333 22C40.3333 24.5361 39.8521 26.9194 38.8896 29.15C37.9271 31.3806 36.6208 33.3208 34.9708 34.9708C33.3208 36.6208 31.3806 37.9271 29.15 38.8896C26.9194 39.8521 24.5361 40.3333 22 40.3333ZM22 36.6667C26.0944 36.6667 29.5625 35.2458 32.4042 32.4042C35.2458 29.5625 36.6667 26.0944 36.6667 22C36.6667 17.9056 35.2458 14.4375 32.4042 11.5958C29.5625 8.75417 26.0944 7.33333 22 7.33333C17.9056 7.33333 14.4375 8.75417 11.5958 11.5958C8.75417 14.4375 7.33333 17.9056 7.33333 22C7.33333 26.0944 8.75417 29.5625 11.5958 32.4042C14.4375 35.2458 17.9056 36.6667 22 36.6667Z" fill="#E62D3C"/>
+</svg>`;
+
+// Empty-state bird ("Nothing here?"). Newly-added bundled PNGs must be
+// referenced by Android resource NAME (see CLAUDE.md) — the require() keeps
+// Metro bundling the drawable. Metro's resource name drops non-[a-z0-9_]
+// characters (the hyphen vanishes): assets/mascot/bird-empty.png →
+// `assets_mascot_birdempty` (verified in the built APK's res listing).
+const BIRD_EMPTY_MOD = require('../../assets/mascot/bird-empty.png');
+export const HISTORY_EMPTY_BIRD: ImageSourcePropType =
+  Platform.OS === 'android' ? { uri: 'assets_mascot_birdempty' } : BIRD_EMPTY_MOD;

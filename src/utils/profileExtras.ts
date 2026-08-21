@@ -1,54 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Profile fields the redesigned Profile screen shows but the backend profile
-// API doesn't carry yet (bio, birthday, preferences, toggles…). Persisted
-// per-uid in AsyncStorage; swap for API calls when the backend adds them.
-
-export interface ProfilePreferences {
-  food?: string;
-  budget?: string;
-  stay?: string;
-}
-
-export interface NotificationPrefs {
-  push: boolean;
-  email: boolean;
-  sms: boolean;
-  likes: boolean;
-  comments: boolean;
-  followers: boolean;
-  messages: boolean;
-  appUpdates: boolean;
-  promotions: boolean;
-}
+// Local mirror of profile fields the backend profile schema doesn't model
+// explicitly. The birthday travels inside `personalization` on PATCH/GET; this
+// copy (per uid) is the fallback if the server ever drops the extra key.
 
 export interface ProfileExtras {
-  bio?: string;
+  /** ISO YYYY-MM-DD. */
   birthday?: string;
-  nationality?: string;
-  currentStatus?: string;
-  occupation?: string;
-  backupEmail?: string;
-  phone?: string;
-  phoneVerified?: boolean;
-  preferences?: ProfilePreferences;
-  lookingFor?: string[];
-  privateAccount?: boolean;
-  allowLocation?: boolean;
-  notifications?: Partial<NotificationPrefs>;
 }
-
-export const DEFAULT_NOTIFICATIONS: NotificationPrefs = {
-  push: true,
-  email: false,
-  sms: false,
-  likes: true,
-  comments: true,
-  followers: false,
-  messages: true,
-  appUpdates: true,
-  promotions: false,
-};
 
 const key = (uid: string) => `konnect.profileExtras.${uid}`;
 

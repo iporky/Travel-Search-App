@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
+import { updateSettings } from '../api/profile';
 import i18n from '../i18n';
 
 export interface AppLanguage {
@@ -65,6 +67,14 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     setLanguageState(lang);
     i18n.changeLanguage(resolveI18nLanguage(lang.code)).catch(() => {});
     AsyncStorage.setItem(STORAGE_KEY, lang.code).catch(() => {});
+    // Best-effort backend sync (PATCH /profile/{uid}/settings — its own
+    // user_settings collection, per the Profile contract). Signed-out picks
+    // stay local-only.
+    if (auth().currentUser) {
+      updateSettings(lang.code).catch((e) =>
+        console.warn('[language] settings sync failed', e?.message ?? e),
+      );
+    }
   }, [resolveI18nLanguage]);
 
   return (

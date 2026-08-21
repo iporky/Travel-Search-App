@@ -30,7 +30,6 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const LOGO = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 
 interface Props {
   activeIndex?: number;
@@ -164,7 +163,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
       </Animated.View>
 
       {/* Logo */}
-      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }} resizeMode="contain" />
+      {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bottom text */}
       <View style={[styles.bottomContent, { bottom: sy(129), paddingHorizontal: sx(16) }]}>

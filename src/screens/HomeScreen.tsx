@@ -35,7 +35,7 @@ const DESIGN_W = 375;
 const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
-const SEARCH_MIN_HEIGHT = sy(78);
+const SEARCH_MIN_HEIGHT = sy(68);
 const SEARCH_MAX_HEIGHT = sy(348);
 
 const LOGO = onboardingSource(
@@ -48,7 +48,13 @@ const BIRD = onboardingSource(
 );
 const SEARCH_MIC_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.001 7.00244V11.0024C17.001 13.7638 14.7624 16.0024 12.001 16.0024C9.23956 16.0024 7.00098 13.7638 7.00098 11.0024V7.00244C7.00098 4.24102 9.23956 2.00244 12.001 2.00244C14.7624 2.00244 17.001 4.24102 17.001 7.00244Z" fill="#D8ECFB" stroke="#D8ECFB" stroke-width="1.5" stroke-linecap="round"/><path d="M20.001 11.0024C20.001 15.4207 16.4193 19.0024 12.001 19.0024M12.001 19.0024C7.5827 19.0024 4.00098 15.4207 4.00098 11.0024M12.001 19.0024V22.0024M12.001 22.0024H15.001M12.001 22.0024H9.00098" stroke="#D8ECFB" stroke-width="1.71429" stroke-linecap="round"/></svg>`;
 
-export function HomeScreen() {
+type HomeScreenProps = {
+  /** When set (e.g. About page's place name), run this search on arrival. */
+  initialQuery?: string | null;
+  onInitialQueryConsumed?: () => void;
+};
+
+export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { language } = useLanguage();
@@ -65,6 +71,14 @@ export function HomeScreen() {
   const [resultQuery, setResultQuery] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const overlayInputRef = useRef<TextInput>(null);
+
+  // A query handed in from another tab (About page place name) runs at once.
+  useEffect(() => {
+    if (!initialQuery) return;
+    runSearch(initialQuery);
+    onInitialQueryConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
 
   // Runs a search: collapses the composer and opens the results screen.
   const runSearch = (text: string) => {
@@ -182,6 +196,13 @@ export function HomeScreen() {
 
   return (
     <View style={styles.flex}>
+      {/* Figma 03_Home_NewUser bg: #eaf4ff → #f2f9ff (surface-elevated →
+          surface-default) — differs from the app-wide surfaceDim gradient. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['#eaf4ff', '#f2f9ff']}
+        style={StyleSheet.absoluteFill}
+      />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
@@ -202,6 +223,15 @@ export function HomeScreen() {
           <Text style={styles.questionText}>{t('home.whereNext')}</Text>
         </View>
 
+        {/* Soft white glow behind the mascot (Figma Ellipse 2099) — the design
+            blurs an ellipse; RN can't blur, so fade white in and out vertically. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.5, 1]}
+          style={styles.birdGlow}
+        />
+
         {/* Mascot (SVG) */}
         <View style={styles.birdWrap}>
           <Animated.View style={[styles.bird, { transform: [{ translateY: birdY }] }]}>
@@ -216,10 +246,13 @@ export function HomeScreen() {
 
       {!composerExpanded ? (
         <View style={[styles.searchDock, keyboardHeight > 0 && { bottom: keyboardHeight + sy(8) }]}>
+          {/* Figma Search Bar: solid #527dff with a #5ca8ff inner top rim —
+              approximated as a vertical gradient (RN can't inset-shadow). */}
           <LinearGradient
-            colors={['#6f95ff', '#527dff']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            colors={['#5ca8ff', '#527dff']}
+            locations={[0, 0.55]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
             style={[styles.searchPill, { height: SEARCH_MIN_HEIGHT }]}
           >
             <Pressable
@@ -261,6 +294,13 @@ export function HomeScreen() {
 
       {composerExpanded ? (
         <View style={[styles.searchOverlay, { paddingBottom: keyboardHeight }]}>
+          {/* Opaque design bg — a translucent scrim let the mascot show
+              through (visibly so behind Samsung's semi-transparent keyboard). */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['#eaf4ff', '#f2f9ff']}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.searchOverlayCard}>
             <View style={styles.searchOverlayTopBar}>
               <Pressable onPress={closeSearchOverlay} hitSlop={12} style={styles.searchOverlayCloseBtn}>
@@ -359,9 +399,10 @@ const styles = StyleSheet.create({
     lineHeight: sx(15),
   },
 
+  // Figma: 20px gap between the logo row and the greeting (11319:44218).
   greetingBlock: {
     paddingHorizontal: sx(20),
-    paddingTop: sy(40),
+    paddingTop: sy(20),
   },
   hiText: {
     fontFamily: 'NationalPark_600SemiBold',
@@ -379,12 +420,21 @@ const styles = StyleSheet.create({
     marginTop: sy(12),
   },
 
+  // Figma: bird top ≈335 of 812 — pushed down into the free middle area.
   birdWrap: {
     alignItems: 'center',
-    paddingVertical: sy(16),
-    marginTop: sy(10),
+    paddingVertical: sy(4),
+    marginTop: sy(90),
   },
   bird: { width: sx(202), height: sy(149) },
+  // Figma Ellipse 2099 (375×131 @ y≈478): soft white halo behind the mascot.
+  birdGlow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: sy(370),
+    height: sy(230),
+  },
 
   suggestions: {
     paddingHorizontal: 0,
@@ -438,6 +488,7 @@ const styles = StyleSheet.create({
     right: sx(20),
     bottom: sy(16),
   },
+  // Figma shadow/Input/default: 0 14 40 rgba(0,119,255,0.2).
   searchPill: {
     borderRadius: sx(40),
     flexDirection: 'row',
@@ -446,25 +497,25 @@ const styles = StyleSheet.create({
     paddingRight: sx(16),
     gap: sx(8),
     shadowColor: '#0077ff',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 14 },
     elevation: 10,
   },
   searchOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(226, 234, 244, 0.58)',
     zIndex: 20,
     justifyContent: 'flex-end',
   },
+  // Figma "Short answer" (10092:45139): the sheet fills the space between the
+  // top of the screen and the keyboard — trending pinned top, composer bottom.
+  // A fixed minHeight here overflowed shorter screens once the keyboard opened,
+  // pushing the close button and heading off-screen.
   searchOverlayCard: {
-    backgroundColor: '#dce5f0',
-    borderTopLeftRadius: sx(30),
-    borderTopRightRadius: sx(30),
+    flex: 1,
     paddingHorizontal: sx(20),
     paddingTop: sy(12),
     paddingBottom: sy(20),
-    minHeight: sy(610),
   },
   searchOverlayTopBar: {
     minHeight: sy(30),
@@ -510,14 +561,16 @@ const styles = StyleSheet.create({
     color: '#383448',
     letterSpacing: -0.14,
   },
+  // Anchored above the keyboard; the flex spacer above absorbs leftover height.
   overlayComposerWrap: {
-    marginTop: sy(28),
+    marginTop: 'auto',
+    paddingTop: sy(16),
   },
   overlayComposer: {
     borderRadius: sx(18),
     borderWidth: 2,
     borderColor: '#4f78ff',
-    backgroundColor: '#dce5f0',
+    backgroundColor: '#ffffff',
     paddingHorizontal: sx(12),
     paddingTop: sy(10),
     paddingBottom: sy(50),

@@ -52,8 +52,7 @@ export function EventComposeView({ initial, editing, onBack, onSubmit }: Props) 
   const canPublish = title.trim().length > 0;
 
   const pickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    // System photo picker — no media permission needed.
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,

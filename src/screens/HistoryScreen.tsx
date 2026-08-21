@@ -1,398 +1,244 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   Pressable,
-  ScrollView,
+  RefreshControl,
+  SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { colors, spacing } from '../theme/tokens';
+import { colors, radius, spacing } from '../theme/tokens';
 import {
-  AiChatFilters,
-  BuzzActivity,
-  BuzzContentKind,
-  BuzzHistoryFilters,
-  HistoryGroup,
+  DEFAULT_HISTORY_FILTERS,
+  HISTORY_SORTS,
+  HISTORY_TIME_RANGES,
+  HistoryFilters,
   HistorySort,
   HistoryTimeRange,
+  SearchHistoryItem,
 } from '../types/history';
-import { aiChatHistory, buzzHistory } from '../mocks/history';
-import { DropdownFilter, FilterOption } from '../components/history/FilterChips';
-import { HistoryEventCard } from '../components/history/HistoryEventCard';
-import { ActionSheetMenu } from '../components/buzz/ActionSheetMenu';
+import { DropdownFilter } from '../components/history/FilterChips';
+import { HistoryRow, emojiForQuery } from '../components/history/HistoryRow';
+import { HistoryEmptyState } from '../components/history/HistoryEmptyState';
 import { HistorySearchScreen } from './history/HistorySearchScreen';
+import { SearchResultsScreen } from './SearchResultsScreen';
 import { ScreenTransition } from '../components/ScreenTransition';
+import { useLanguage } from '../context/LanguageContext';
+import { applyRecentlyViewed, useHistorySections, useSearchHistory } from '../hooks/useSearchHistory';
+import { loadViewed, markViewed, ViewedMap } from '../utils/historyViewed';
 
-// Figma: History_Kiki Chat (10936:78060) + History_Buzz (10936:77804).
-// One screen, two top tabs:
-//   • AI Chats — Sort + Time filters only
-//   • Buzz — Activity / Content / Sort / Time filters
-// Cards grouped chronologically (Today, Yesterday, Last Week). Header, tabs
-// and filter bar are all fixed; only the card list scrolls beneath them.
-
-type HistoryTab = 'aiChats' | 'buzz';
-
-const HEADER_H = 56;
-const GROUP_ORDER: HistoryGroup[] = ['today', 'yesterday', 'lastWeek', 'older'];
-
-// Which chronological groups a time-range keeps (mock-level approximation).
-const RANGE_GROUPS: Record<HistoryTimeRange, HistoryGroup[]> = {
-  today: ['today'],
-  last7: ['today', 'yesterday', 'lastWeek'],
-  last30: ['today', 'yesterday', 'lastWeek', 'older'],
-  last3m: ['today', 'yesterday', 'lastWeek', 'older'],
-  last6m: ['today', 'yesterday', 'lastWeek', 'older'],
-  thisYear: ['today', 'yesterday', 'lastWeek', 'older'],
-  allTime: ['today', 'yesterday', 'lastWeek', 'older'],
-};
-
-const KIND_ICON: Record<BuzzContentKind, keyof typeof Ionicons.glyphMap> = {
-  ping: 'chatbubbles-outline',
-  drop: 'image-outline',
-  vibe: 'calendar-outline',
-};
+// Figma "History for Aug release" (section 12232:59925) — Kiki AI history:
+//   • Header: "History" (Heading 35/ExtraBold) + search icon.
+//   • Two filter chips — sort (default Newest) and date (default All time) —
+//     each opening an action sheet; the chip shows the selected value and the
+//     list refreshes on pick.
+//   • Rows grouped by month ("August"), each a `Suggestion Chip/L`.
+//   • Empty: bird + "Nothing here?" (no history at all) vs alert icon +
+//     "No matching results" (filters return 0).
+// Data: GET /api/v1/history/search (token-scoped, Confluence contract 46268418)
+// — the questions this user asked Kiki. Tapping a row re-opens it in search.
 
 type Props = {
-  /** Reports when the search view is open so the app hides the tab bar. */
+  /** Reports when a full-screen sub-view (search / results) is open so the app hides the tab bar. */
   onFullScreen?: (full: boolean) => void;
 };
 
+type Mode = { kind: 'list' } | { kind: 'search' } | { kind: 'results'; query: string; from: 'list' | 'search' };
+
 export function HistoryScreen({ onFullScreen }: Props) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<HistoryTab>('aiChats');
-  const [searching, setSearching] = useState(false);
-
-  const [aiFilters, setAiFilters] = useState<AiChatFilters>({
-    sort: 'newest',
-    time: 'thisYear',
-  });
-  const [buzzFilters, setBuzzFilters] = useState<BuzzHistoryFilters>({
-    activity: null,
-    content: null,
-    sort: 'newest',
-    time: 'thisYear',
-  });
-
-  const [likedAi, setLikedAi] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(aiChatHistory.map((i) => [i.id, i.liked])),
-  );
-  const [likedBuzz, setLikedBuzz] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(buzzHistory.map((i) => [i.id, i.liked])),
-  );
-  const [savedBuzz, setSavedBuzz] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(buzzHistory.map((i) => [i.id, i.saved])),
-  );
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-
-  useEffect(() => onFullScreen?.(searching), [searching, onFullScreen]);
+  const { language } = useLanguage();
+  const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
+  const [mode, setMode] = useState<Mode>({ kind: 'list' });
+  const [viewed, setViewed] = useState<ViewedMap>({});
+  const viewedRef = useRef(viewed);
+  viewedRef.current = viewed;
 
   useEffect(() => {
-    if (!searching) return;
+    loadViewed().then(setViewed);
+  }, []);
+
+  useEffect(() => onFullScreen?.(mode.kind !== 'list'), [mode.kind, onFullScreen]);
+
+  useEffect(() => {
+    if (mode.kind === 'list') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setSearching(false);
+      setMode((m) => (m.kind === 'results' && m.from === 'search' ? { kind: 'search' } : { kind: 'list' }));
       return true;
     });
     return () => sub.remove();
-  }, [searching]);
+  }, [mode.kind]);
 
-  const sortOptions: FilterOption[] = [
-    { value: 'newest', label: t('history.sort.newest') },
-    { value: 'oldest', label: t('history.sort.oldest') },
-    ...(tab === 'buzz'
-      ? [{ value: 'recentlyViewed', label: t('history.sort.recentlyViewed') }]
-      : []),
-  ];
-  const timeOptions: FilterOption[] = (
-    ['today', 'last7', 'last30', 'last3m', 'last6m', 'thisYear', 'allTime'] as const
-  ).map((v) => ({ value: v, label: t(`history.time.${v}`) }));
-  const activityOptions: FilterOption[] = (
-    ['saved', 'liked', 'myPosts', 'myComments'] as const
-  ).map((v) => ({ value: v, label: t(`history.activity.${v}`) }));
-  const contentOptions: FilterOption[] = (['ping', 'drop', 'vibe'] as const).map((v) => ({
-    value: v,
-    label: t(`history.content.${v}`),
-  }));
+  const history = useSearchHistory({ filters });
+  const ordered = filters.sort === 'recentlyViewed' ? applyRecentlyViewed(history.items, viewed) : history.items;
+  const sections = useHistorySections(ordered, 'month', language.voiceLocale);
 
-  const aiGroups = useMemo(() => {
-    const allowed = RANGE_GROUPS[aiFilters.time];
-    const items = aiChatHistory.filter((i) => allowed.includes(i.group));
-    const order = aiFilters.sort === 'oldest' ? [...GROUP_ORDER].reverse() : GROUP_ORDER;
-    return order
-      .map((g) => ({ group: g, items: items.filter((i) => i.group === g) }))
-      .filter((g) => g.items.length > 0);
-  }, [aiFilters]);
+  const openItem = useCallback(
+    (item: SearchHistoryItem, from: 'list' | 'search') => {
+      markViewed(item.id, viewedRef.current).then(setViewed);
+      setMode({ kind: 'results', query: item.user_query, from });
+    },
+    [],
+  );
 
-  const buzzGroups = useMemo(() => {
-    const allowed = RANGE_GROUPS[buzzFilters.time];
-    let items = buzzHistory.filter((i) => allowed.includes(i.group));
-    if (buzzFilters.activity) {
-      items = items.filter((i) =>
-        buzzFilters.activity === 'saved'
-          ? savedBuzz[i.id]
-          : buzzFilters.activity === 'liked'
-            ? likedBuzz[i.id]
-            : i.activity === buzzFilters.activity,
-      );
-    }
-    if (buzzFilters.content) items = items.filter((i) => i.kind === buzzFilters.content);
-    const order = buzzFilters.sort === 'oldest' ? [...GROUP_ORDER].reverse() : GROUP_ORDER;
-    return order
-      .map((g) => ({ group: g, items: items.filter((i) => i.group === g) }))
-      .filter((g) => g.items.length > 0);
-  }, [buzzFilters, likedBuzz, savedBuzz]);
+  const sortOptions = HISTORY_SORTS.map((v) => ({ value: v, label: t(`history.sort.${v}`) }));
+  const timeOptions = HISTORY_TIME_RANGES.map((v) => ({ value: v, label: t(`history.time.${v}`) }));
 
-  if (searching) {
+  // ── Sub-views ──────────────────────────────────────────────────────────────
+  if (mode.kind === 'results') {
+    return (
+      <ScreenTransition transitionKey={`history-results-${mode.query}`} mode="push">
+        <SearchResultsScreen
+          query={mode.query}
+          onBack={() => setMode(mode.from === 'search' ? { kind: 'search' } : { kind: 'list' })}
+          onAsk={(q) => setMode({ kind: 'results', query: q, from: mode.from })}
+        />
+      </ScreenTransition>
+    );
+  }
+  if (mode.kind === 'search') {
     return (
       <ScreenTransition transitionKey="historySearch" mode="push">
-        <HistorySearchScreen onBack={() => setSearching(false)} />
+        <HistorySearchScreen
+          viewed={viewed}
+          onBack={() => setMode({ kind: 'list' })}
+          onOpen={(item) => openItem(item, 'search')}
+        />
       </ScreenTransition>
     );
   }
 
-  const groups = tab === 'aiChats' ? aiGroups : buzzGroups;
+  // ── Main list ──────────────────────────────────────────────────────────────
+  const filtersAtDefault =
+    filters.sort === DEFAULT_HISTORY_FILTERS.sort && filters.time === DEFAULT_HISTORY_FILTERS.time;
 
   return (
     <View style={styles.screen}>
-      {/* Fixed top block: header + tabs + filter bar. Only the list scrolls. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t('history.title')}</Text>
-        <Pressable hitSlop={10} onPress={() => setSearching(true)}>
-          <Ionicons name="search" size={20} color="#0a1422" />
+        <Pressable style={styles.searchBtn} hitSlop={6} onPress={() => setMode({ kind: 'search' })}>
+          <Ionicons name="search" size={24} color={colors.icon.primary} />
         </Pressable>
       </View>
 
-      <View style={styles.tabsWrap}>
-        <View style={styles.tabs}>
-          {(['aiChats', 'buzz'] as const).map((key) => {
-            const active = tab === key;
-            return (
-              <Pressable
-                key={key}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
-                onPress={() => setTab(key)}
-              >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                  {t(`history.tabs.${key}`)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-          style={styles.chipsScroll}
-        >
-          {tab === 'buzz' && (
-            <>
-              <DropdownFilter
-                label={t('history.filters.activity')}
-                valueLabel={
-                  buzzFilters.activity
-                    ? t(`history.activity.${buzzFilters.activity}`)
-                    : t('history.filters.activity')
-                }
-                active={buzzFilters.activity != null}
-                title={t('history.filters.activity')}
-                options={activityOptions}
-                selected={buzzFilters.activity}
-                clearable
-                onSelect={(v) =>
-                  setBuzzFilters((f) => ({ ...f, activity: v as BuzzActivity | null }))
-                }
-              />
-              <DropdownFilter
-                label={t('history.filters.content')}
-                valueLabel={
-                  buzzFilters.content
-                    ? t(`history.content.${buzzFilters.content}`)
-                    : t('history.filters.content')
-                }
-                active={buzzFilters.content != null}
-                title={t('history.filters.content')}
-                options={contentOptions}
-                selected={buzzFilters.content}
-                clearable
-                onSelect={(v) =>
-                  setBuzzFilters((f) => ({ ...f, content: v as BuzzContentKind | null }))
-                }
-              />
-            </>
-          )}
-          <DropdownFilter
-            label={t('history.filters.sort')}
-            valueLabel={t(
-              `history.sort.${tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}`,
-            )}
-            active={(tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort) !== 'newest'}
-            title={t('history.filters.sort')}
-            options={sortOptions}
-            selected={tab === 'aiChats' ? aiFilters.sort : buzzFilters.sort}
-            onSelect={(v) => {
-              if (!v) return;
-              if (tab === 'aiChats') setAiFilters((f) => ({ ...f, sort: v as HistorySort }));
-              else setBuzzFilters((f) => ({ ...f, sort: v as HistorySort }));
-            }}
-          />
-          <DropdownFilter
-            label={t('history.filters.time')}
-            valueLabel={t(
-              `history.time.${tab === 'aiChats' ? aiFilters.time : buzzFilters.time}`,
-            )}
-            active={(tab === 'aiChats' ? aiFilters.time : buzzFilters.time) !== 'thisYear'}
-            title={t('history.filters.time')}
-            options={timeOptions}
-            selected={tab === 'aiChats' ? aiFilters.time : buzzFilters.time}
-            onSelect={(v) => {
-              if (!v) return;
-              if (tab === 'aiChats')
-                setAiFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
-              else setBuzzFilters((f) => ({ ...f, time: v as HistoryTimeRange }));
-            }}
-          />
-        </ScrollView>
+      <View style={styles.chipsRow}>
+        <DropdownFilter
+          valueLabel={t(`history.sort.${filters.sort}`)}
+          options={sortOptions}
+          onSelect={(v) => setFilters((f) => ({ ...f, sort: v as HistorySort }))}
+        />
+        <DropdownFilter
+          valueLabel={t(`history.time.${filters.time}`)}
+          options={timeOptions}
+          onSelect={(v) => setFilters((f) => ({ ...f, time: v as HistoryTimeRange }))}
+        />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      >
-        {groups.length === 0 ? (
-          <Text style={styles.empty}>{t('history.empty')}</Text>
-        ) : (
-          groups.map(({ group, items }) => (
-            <View key={group} style={styles.groupBlock}>
-              {items.map((item) =>
-                'messages' in item ? (
-                  <HistoryEventCard
-                    key={item.id}
-                    caption={t('history.kikiChat')}
-                    title={item.title}
-                    thumbIcon="sparkles-outline"
-                    time={item.time}
-                    liked={!!likedAi[item.id]}
-                    faded={group === 'lastWeek' || group === 'older'}
-                    onPress={() => {}}
-                    onToggleLike={() =>
-                      setLikedAi((m) => ({ ...m, [item.id]: !m[item.id] }))
-                    }
-                  />
-                ) : (
-                  <HistoryEventCard
-                    key={item.id}
-                    caption={`${t(`history.content.${item.kind}`)} · ${item.category}`}
-                    title={item.title}
-                    thumbIcon={KIND_ICON[item.kind]}
-                    location={item.location}
-                    time={item.time}
-                    liked={!!likedBuzz[item.id]}
-                    saved={!!savedBuzz[item.id]}
-                    faded={group === 'lastWeek' || group === 'older'}
-                    onPress={() => {}}
-                    onToggleLike={() =>
-                      setLikedBuzz((m) => ({ ...m, [item.id]: !m[item.id] }))
-                    }
-                    onLongPress={() => setMenuFor(item.id)}
-                  />
-                ),
-              )}
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      <ActionSheetMenu
-        visible={menuFor != null}
-        items={
-          menuFor
-            ? [
-                {
-                  label: savedBuzz[menuFor]
-                    ? t('history.actions.unsave')
-                    : t('history.actions.save'),
-                  onPress: () =>
-                    setSavedBuzz((m) => ({ ...m, [menuFor]: !m[menuFor] })),
-                },
-              ]
-            : []
-        }
-        onClose={() => setMenuFor(null)}
-      />
+      {history.loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.blue[500]} />
+        </View>
+      ) : history.error && history.items.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.muted}>{t('history.loadError')}</Text>
+          <Pressable style={styles.retryBtn} onPress={history.refresh}>
+            <Text style={styles.retryText}>{t('events.retry')}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <View style={styles.rowGap} />}
+          renderSectionHeader={({ section }) => (
+            <Text
+              style={[
+                styles.sectionTitle,
+                section.key !== sections[0]?.key && styles.sectionTitleSpaced,
+              ]}
+            >
+              {section.title}
+            </Text>
+          )}
+          renderItem={({ item }) => (
+            <HistoryRow
+              label={item.user_query}
+              emoji={emojiForQuery(item.user_query)}
+              onPress={() => openItem(item, 'list')}
+            />
+          )}
+          refreshControl={
+            <RefreshControl refreshing={history.refreshing} onRefresh={history.refresh} tintColor={colors.blue[500]} />
+          }
+          onEndReached={history.loadMore}
+          onEndReachedThreshold={0.6}
+          ListEmptyComponent={<HistoryEmptyState kind={filtersAtDefault ? 'noHistory' : 'noMatches'} />}
+          ListFooterComponent={
+            history.loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={colors.blue[500]} />
+              </View>
+            ) : (
+              <View style={styles.footer} />
+            )
+          }
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Figma frame background: #f8f9fb.
-  screen: { flex: 1, backgroundColor: '#f8f9fb' },
+  // Transparent: the app-wide surfaceDim gradient shows through (design bg #f2f9ff).
+  screen: { flex: 1 },
+  // Figma Screen: pt 16 → Header (44 tall, px 20) → 24 gap → Content Area.
   header: {
-    height: HEADER_H,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    backgroundColor: 'rgba(248,249,251,0.92)',
-    borderBottomWidth: 1,
-    borderBottomColor: '#c5c6cc',
+    height: 44,
+    marginTop: spacing[4],
+    marginBottom: spacing[6],
+    paddingHorizontal: spacing[5],
   },
   headerTitle: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 20,
-    lineHeight: 28,
-    color: '#0a1422',
+    fontFamily: 'NationalPark_800ExtraBold',
+    fontSize: 35,
+    lineHeight: 44,
+    letterSpacing: -1.4,
+    color: colors.text.primary,
   },
-  tabsWrap: { backgroundColor: '#f8f9fb' },
-  tabs: {
-    flexDirection: 'row',
-    marginHorizontal: spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: '#c5c6cc',
-  },
-  tabBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 14,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-    marginBottom: -1,
-  },
-  tabBtnActive: { borderBottomColor: '#0a1422' },
-  tabText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#585f6a',
-  },
-  tabTextActive: {
-    fontFamily: 'NationalPark_600SemiBold',
-    color: '#0a1422',
-  },
-  chipsScroll: { flexGrow: 0 },
+  searchBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // Filter row: chips 4 apart, 20 side padding, 20 gap to the first group.
   chipsRow: {
     flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 8,
-    paddingHorizontal: spacing[4],
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing[5],
+    marginBottom: spacing[5],
   },
-  listContent: {
-    paddingTop: spacing[4],
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[16],
-    gap: spacing[6],
+  list: { paddingHorizontal: spacing[5], paddingBottom: spacing[16] },
+  // Group: Body/16/Bold title, 16 gap to its rows; groups 24 apart; rows 10 apart.
+  sectionTitle: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: -0.16,
+    color: colors.gray[1300],
+    marginBottom: spacing[4],
   },
-  groupBlock: { gap: spacing[3] },
-  empty: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.text.disabled,
-    textAlign: 'center',
-    marginTop: spacing[10],
-  },
+  sectionTitleSpaced: { marginTop: spacing[6] },
+  rowGap: { height: 10 },
+  footer: { paddingVertical: spacing[6] },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing[3], padding: spacing[8] },
+  muted: { fontFamily: 'NationalPark_500Medium', fontSize: 14, color: colors.text.disabled, textAlign: 'center' },
+  retryBtn: { paddingHorizontal: spacing[5], paddingVertical: spacing[3], borderRadius: radius.full, backgroundColor: colors.blue[500] },
+  retryText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 14, color: colors.gray[100] },
 });

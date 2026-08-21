@@ -13,7 +13,6 @@ const APP_ASSETS: number[] = [
   // require() there, so nothing to preload here.
   require('../../assets/onboarding/airplane.png'),
   require('../../assets/onboarding/chevron-left.png'),
-  require('../../assets/onboarding/fill.png'),
   require('../../assets/onboarding/track.png'),
   require('../../assets/onboarding/road-path.png'),
 
@@ -48,6 +47,9 @@ const APP_ASSETS: number[] = [
 
   // Voice mascot raster.
   require('../../assets/voice/bird.png'),
+
+  // History empty-state bird (Figma "Nothing here?").
+  require('../../assets/mascot/bird-empty.png'),
 
   // NOTE: the nav/voice/auth icons are rendered as inline SVG strings
   // (TabBar, VoiceOverlay), so their .svg files don't need preloading.

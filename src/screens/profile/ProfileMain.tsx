@@ -1,22 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  BackHandler,
   Image,
-  Modal,
-  Pressable,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import auth from '@react-native-firebase/auth';
-import { colors, radius, spacing } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { ProfileSetupScreen } from '../onboarding/ProfileSetupScreen';
 import {
   getOnboarding,
   recordToAnswers,
@@ -28,770 +25,427 @@ import {
   DESTINATIONS_QUESTION,
   OnboardingQuestion,
 } from '../../api/onboarding';
+import { getProfile, updateProfile, UserProfile } from '../../api/profile';
+import { loadProfileExtras, saveProfileExtras } from '../../utils/profileExtras';
+import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
+import { Card, IconButton, InfoRow, SectionTitle } from '../../components/profile/ProfileUI';
 import {
-  loadProfileExtras,
-  ProfileExtras,
-  saveProfileExtras,
-} from '../../utils/profileExtras';
-import { EditFieldModal } from '../../components/profile/EditFieldModal';
-import { P } from '../../components/profile/ProfileUI';
+  InterestChipList,
+  MAX_INTERESTS,
+  PREDEFINED_INTERESTS,
+} from '../../components/profile/InterestChips';
+import { AddInterestModal } from '../../components/profile/AddInterestModal';
+import { ErrorToast } from '../../components/profile/ErrorToast';
+import { DatePickerDialog, parseIsoDate } from '../../components/profile/DatePickerDialog';
 
-// Figma: kiki-ai-profile-redesign (10978:93429).
-// Top bar (Profile + private toggle + settings) → identity card → completion
-// card → About → What I like → Preferences → Travel Profile → Looking For.
+// Figma "Profile for Aug release" (section 12276:93796) — Profile_Default /
+// Profile_Edit / Profile_DatePicker / Profile_AddingInterests / MaxInterests.
+//
+// Common logic (design annotation): existing design-system components, the
+// design's spacing/typography, onboarding answers shown as the default profile
+// values, exact destination frames per interaction.
+//
+// Data:
+//   • GET /api/v1/profile/{uid}   → @username, email, name, personalization
+//     { description (bio), interests, birthday }  — the same contract the web
+//     Profile page uses (PATCH is a partial multipart update)
+//   • GET /api/v1/onboarding/{uid} → the Preferences card (visit status, travel
+//     companion, role, stay duration, destination area, interests)
+// Edit state (pencil → check): name / birthday / bio editable in place; check
+// PATCHes what changed; hardware back discards. Interests toggle any time
+// (max 5 → red toast); "+ Add more" opens the custom-interest modal.
 
-type Props = {
-  onOpenSettings: () => void;
-  onStartVerify: (mode: 'phone' | 'email') => void;
-};
+type Props = { onOpenSettings: () => void };
 
-type EditTarget =
-  | 'bio'
-  | 'birthday'
-  | 'nationality'
-  | 'backupEmail'
-  | 'food'
-  | 'budget'
-  | 'stay'
-  | 'lookingFor'
-  | null;
+type Draft = { name: string; bio: string; birthday: string | null };
 
 const optionLabel = (q: OnboardingQuestion, id?: string) =>
   q.options.find((o) => o.id === id)?.label;
 
-export function ProfileMain({ onOpenSettings, onStartVerify }: Props) {
+export function ProfileMain({ onOpenSettings }: Props) {
   const { t } = useTranslation();
-  const { user, restartPersonalizationFromQuestions, saveProfile, refreshProfile } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const { language } = useLanguage();
-
-  const [editingIdentity, setEditingIdentity] = useState(false);
-  const [editTarget, setEditTarget] = useState<EditTarget>(null);
-  const [extras, setExtras] = useState<ProfileExtras>({});
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
-
   const uid = user?.id ?? 'anon';
 
-  useEffect(() => {
-    refreshProfile();
-  }, [refreshProfile]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Draft>({ name: '', bio: '', birthday: null });
+  const [interests, setInterests] = useState<string[]>([]);
+  const [customInterests, setCustomInterests] = useState<string[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const interestsRef = useRef(interests);
+  interestsRef.current = interests;
 
-  useEffect(() => {
-    loadProfileExtras(uid).then(setExtras);
-  }, [uid]);
-
-  // Onboarding answers feed the AI-personalization sections.
-  useEffect(() => {
-    getOnboarding()
-      .then((rec) => {
-        if (rec) setAnswers(recordToAnswers(rec));
-      })
-      .catch(() => {});
-  }, []);
-
-  const patchExtras = useCallback(
-    (patch: Partial<ProfileExtras>) => {
-      setExtras((cur) => ({ ...cur, ...patch }));
-      saveProfileExtras(uid, patch);
+  // ── Load ───────────────────────────────────────────────────────────────────
+  const hydrate = useCallback(
+    (p: UserProfile | null, localBirthday?: string | null) => {
+      setProfile(p);
+      const pers = p?.personalization ?? {};
+      const list = (pers.interests ?? []).map((s) => s.trim()).filter(Boolean);
+      setInterests(list);
+      setCustomInterests(list.filter((i) => !(PREDEFINED_INTERESTS as readonly string[]).includes(i)));
+      setDraft({
+        name: p?.name ?? user?.name ?? '',
+        bio: pers.description ?? '',
+        birthday: p?.about?.birthday ?? localBirthday ?? null,
+      });
     },
-    [uid],
+    [user?.name],
   );
 
-  const fbUser = auth().currentUser;
-  const memberSinceYear = useMemo(() => {
-    const ts = fbUser?.metadata?.creationTime;
-    return ts ? new Date(ts).getFullYear() : new Date().getFullYear();
-  }, [fbUser]);
-  const emailVerified = fbUser?.emailVerified ?? false;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [p, extras] = await Promise.all([
+        getProfile().catch((e) => {
+          console.warn('[Profile] getProfile failed', e?.message ?? e);
+          return null;
+        }),
+        loadProfileExtras(uid),
+      ]);
+      if (!alive) return;
+      hydrate(p, extras.birthday ?? null);
+      setLoading(false);
+    })();
+    getOnboarding()
+      .then((rec) => {
+        if (alive && rec) setAnswers(recordToAnswers(rec));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [uid, hydrate]);
 
+  // Hardware back in edit mode discards (annotation: "Cancel/back → discard").
+  useEffect(() => {
+    if (!editing) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      cancelEdit();
+      return true;
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, profile]);
+
+  const cancelEdit = () => {
+    hydrate(profile, draft.birthday);
+    setEditing(false);
+  };
+
+  // ── Persist ────────────────────────────────────────────────────────────────
+  const persist = useCallback(
+    async (fields: { name?: string; personalization?: { description: string; interests: string[] }; about?: { birthday: string | null } }) => {
+      const updated = await updateProfile(fields);
+      setProfile(updated);
+      if (fields.about) {
+        // Local mirror — display fallback if an older server ignores `about`.
+        saveProfileExtras(uid, { birthday: fields.about.birthday ?? undefined });
+      }
+      refreshProfile().catch(() => {});
+      return updated;
+    },
+    [uid, refreshProfile],
+  );
+
+  const personalizationBlock = (list: string[], d: Draft) => ({
+    description: d.bio.trim(),
+    interests: list,
+  });
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const fields: Parameters<typeof persist>[0] = {};
+      const name = draft.name.trim();
+      if (name && name !== (profile?.name ?? '')) fields.name = name;
+      const pers = profile?.personalization ?? {};
+      const persChanged =
+        draft.bio.trim() !== (pers.description ?? '') ||
+        interests.length !== (pers.interests ?? []).length ||
+        interests.some((i) => !(pers.interests ?? []).includes(i));
+      if (persChanged) fields.personalization = personalizationBlock(interests, draft);
+      if ((draft.birthday ?? null) !== (profile?.about?.birthday ?? null)) {
+        fields.about = { birthday: draft.birthday };
+      }
+      if (Object.keys(fields).length) await persist(fields);
+      setEditing(false);
+    } catch (e: any) {
+      console.warn('[Profile] save failed', e?.message ?? e);
+      setToast(t('profile.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Interests: toggle any time; outside edit mode the change is written straight away.
+  const applyInterests = (next: string[]) => {
+    setInterests(next);
+    if (!editing) {
+      persist({ personalization: personalizationBlock(next, draft) }).catch((e) => {
+        console.warn('[Profile] interests save failed', e?.message ?? e);
+        setToast(t('profile.saveFailed'));
+      });
+    }
+  };
+
+  const toggleInterest = (name: string) => {
+    const cur = interestsRef.current;
+    if (cur.includes(name)) {
+      applyInterests(cur.filter((i) => i !== name));
+      return;
+    }
+    if (cur.length >= MAX_INTERESTS) {
+      setToast(t('profile.maxInterests', { count: MAX_INTERESTS }));
+      return;
+    }
+    applyInterests([...cur, name]);
+  };
+
+  const openAddInterest = () => {
+    // Annotation: at the cap, "+ Add more" shows the MaxInterests alert instead.
+    if (interestsRef.current.length >= MAX_INTERESTS) {
+      setToast(t('profile.maxInterests', { count: MAX_INTERESTS }));
+      return;
+    }
+    setAddOpen(true);
+  };
+
+  const addCustomInterest = (raw: string) => {
+    const name = raw.trim();
+    setAddOpen(false);
+    if (!name) return;
+    const all = [...(PREDEFINED_INTERESTS as readonly string[]), ...customInterests];
+    const existing = all.find((i) => i.toLowerCase() === name.toLowerCase());
+    const final = existing ?? name;
+    if (!existing) setCustomInterests((c) => [...c, final]);
+    if (!interestsRef.current.includes(final)) toggleInterest(final);
+  };
+
+  // ── Derived labels ─────────────────────────────────────────────────────────
   const purposeId = answers.purpose?.[0];
-  const statusLabel =
-    purposeId === 'already_here'
-      ? t('profileMain.status.inKorea')
-      : purposeId === 'planning_trip'
-        ? t('profileMain.status.planning')
+  const visitLabel =
+    purposeId === 'planning_trip'
+      ? t('profile.visit.planning')
+      : purposeId === 'already_here'
+        ? t('profile.visit.inKorea')
         : purposeId === 'just_exploring'
-          ? t('profileMain.status.exploring')
+          ? t('profile.visit.exploring')
           : undefined;
-  const occupationLabel = optionLabel(OCCUPATION_QUESTION, answers.occupation?.[0]);
   const companionLabel = optionLabel(TRAVELING_WITH_QUESTION, answers.traveling_with?.[0]);
+  const roleLabel = optionLabel(OCCUPATION_QUESTION, answers.occupation?.[0]);
   const durationLabel =
     optionLabel(STAY_LENGTH_QUESTION, answers.stay_length?.[0]) ??
     optionLabel(STAY_LENGTH_DE_QUESTION, answers.stay_length_de?.[0]);
-  const regionLabels = (answers.destinations ?? [])
+  const destinationLabel = (answers.destinations ?? [])
     .map((d) => optionLabel(DESTINATIONS_QUESTION, d))
     .filter(Boolean)
     .join(', ');
-  const interestLabels = (answers.interests ?? [])
+  const onboardingInterests = (answers.interests ?? [])
     .map((i) => optionLabel(INTERESTS_QUESTION, i))
-    .filter((v): v is string => !!v);
+    .filter(Boolean)
+    .join(', ');
 
-  const lookingFor = extras.lookingFor ?? [];
-
-  // Profile completion — mandatory + account + optional personalization fields.
-  const completion = useMemo(() => {
-    const checks: boolean[] = [
-      !!user?.photo,
-      !!user?.name,
-      !!user?.email,
-      !!extras.phone,
-      !!extras.bio,
-      !!extras.birthday,
-      !!extras.nationality,
-      !!purposeId,
-      !!occupationLabel || !!companionLabel,
-      !!durationLabel,
-      interestLabels.length > 0,
-      !!extras.preferences?.food,
-      !!extras.preferences?.budget,
-      !!extras.preferences?.stay,
-      lookingFor.length > 0,
-    ];
-    const done = checks.filter(Boolean).length;
-    return Math.round((done / checks.length) * 100);
-  }, [
-    user,
-    extras,
-    purposeId,
-    occupationLabel,
-    companionLabel,
-    durationLabel,
-    interestLabels.length,
-    lookingFor.length,
-  ]);
-
-  const maskedPhone = extras.phone
-    ? extras.phone.replace(/\d(?=\d{4})/g, '•').replace(/(•{3})(?=•)/g, '$1 ')
-    : null;
-
-  const editConfig: Record<
-    Exclude<EditTarget, null>,
-    { title: string; placeholder: string; initial?: string; multiline?: boolean }
-  > = {
-    bio: {
-      title: t('profileMain.editBio'),
-      placeholder: t('profileMain.bioPlaceholder'),
-      initial: extras.bio,
-      multiline: true,
-    },
-    birthday: {
-      title: t('profileMain.about.birthday'),
-      placeholder: 'YYYY-MM-DD',
-      initial: extras.birthday,
-    },
-    nationality: {
-      title: t('profileMain.travel.nationality'),
-      placeholder: t('profileMain.travel.nationalityPlaceholder'),
-      initial: extras.nationality,
-    },
-    backupEmail: {
-      title: t('profileMain.addBackupEmail'),
-      placeholder: 'name@example.com',
-      initial: extras.backupEmail,
-    },
-    food: {
-      title: t('profileMain.prefs.food'),
-      placeholder: t('profileMain.prefs.foodPlaceholder'),
-      initial: extras.preferences?.food,
-    },
-    budget: {
-      title: t('profileMain.prefs.budget'),
-      placeholder: t('profileMain.prefs.budgetPlaceholder'),
-      initial: extras.preferences?.budget,
-    },
-    stay: {
-      title: t('profileMain.prefs.stay'),
-      placeholder: t('profileMain.prefs.stayPlaceholder'),
-      initial: extras.preferences?.stay,
-    },
-    lookingFor: {
-      title: t('profileMain.addLookingFor'),
-      placeholder: t('profileMain.lookingForPlaceholder'),
-    },
-  };
-
-  const onSaveEdit = (value: string) => {
-    if (!editTarget) return;
-    if (editTarget === 'bio') patchExtras({ bio: value || undefined });
-    else if (editTarget === 'birthday') patchExtras({ birthday: value || undefined });
-    else if (editTarget === 'nationality') patchExtras({ nationality: value || undefined });
-    else if (editTarget === 'backupEmail') patchExtras({ backupEmail: value || undefined });
-    else if (editTarget === 'lookingFor') {
-      if (value) patchExtras({ lookingFor: [...lookingFor, value] });
-    } else {
-      patchExtras({ preferences: { ...extras.preferences, [editTarget]: value || undefined } });
+  const birthdayLabel = useMemo(() => {
+    const d = parseIsoDate(draft.birthday);
+    if (!d) return '';
+    const date = new Date(d.y, d.m, d.d);
+    try {
+      return new Intl.DateTimeFormat(language.voiceLocale, { month: 'long', day: 'numeric' }).format(date);
+    } catch {
+      return `${d.m + 1}/${d.d}`;
     }
-    setEditTarget(null);
-  };
+  }, [draft.birthday, language.voiceLocale]);
 
-  const initials = user?.name ? user.name.charAt(0).toUpperCase() : 'K';
+  const allInterestChips = [...(PREDEFINED_INTERESTS as readonly string[]), ...customInterests];
+  const username = profile?.username || user?.name || '';
+  const email = profile?.email || user?.email || '';
+  const photo = profile?.profile_pic || user?.photo || null;
+
+  const prefRows: { key: string; label: string; value?: string }[] = [
+    { key: 'visit', label: t('profile.prefs.visitStatus'), value: visitLabel },
+    { key: 'companion', label: t('profile.prefs.travelCompanion'), value: companionLabel },
+    { key: 'role', label: t('profile.prefs.role'), value: roleLabel },
+    { key: 'duration', label: t('profile.prefs.stayDuration'), value: durationLabel },
+    { key: 'destination', label: t('profile.prefs.destinationArea'), value: destinationLabel || undefined },
+    { key: 'interests', label: t('profile.prefs.interests'), value: onboardingInterests || undefined },
+  ];
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Top app bar: title + PRIVATE toggle + settings gear */}
-        <View style={styles.topBar}>
-          <Text style={styles.screenTitle}>{t('profileMain.title')}</Text>
-          <View style={styles.topActions}>
-            <View style={styles.privacyToggle}>
-              <Text style={styles.privateLabel}>{t('profileMain.private')}</Text>
-              <Switch
-                value={!!extras.privateAccount}
-                onValueChange={(v) => patchExtras({ privateAccount: v })}
-                trackColor={{ false: '#e5e7eb', true: P.dark }}
-                thumbColor="#ffffff"
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Header: "Profile" 35/ExtraBold + Edit|Check + Settings (Google icons). */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{t('profile.title')}</Text>
+        <View style={styles.headerIcons}>
+          {saving ? (
+            <View style={styles.iconSlot}>
+              <ActivityIndicator color={colors.blue[500]} />
+            </View>
+          ) : (
+            <IconButton icon={editing ? 'check' : 'edit'} onPress={editing ? save : () => setEditing(true)} />
+          )}
+          <IconButton icon="settings" onPress={onOpenSettings} />
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Identity card: 100px avatar, @username, email. */}
+        <View style={styles.identity}>
+          <View style={styles.avatarWrap}>
+            <Image source={photo ? { uri: photo } : AVATAR_SOURCE} style={styles.avatar} resizeMode="cover" />
+          </View>
+          <Text style={styles.username} numberOfLines={1}>
+            @{username}
+          </Text>
+          <Text style={styles.email} numberOfLines={1}>
+            {email || t('profileMain.noEmail')}
+          </Text>
+        </View>
+
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={colors.blue[500]} />
+          </View>
+        ) : (
+          <>
+            {/* About */}
+            <View style={styles.section}>
+              <SectionTitle style={styles.sectionTitlePad}>{t('profile.about')}</SectionTitle>
+              <Card>
+                <InfoRow
+                  label={t('profile.fields.name')}
+                  value={draft.name}
+                  placeholder={t('profile.fields.namePlaceholder')}
+                  editable={editing}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, name: v }))}
+                />
+                <InfoRow
+                  label={t('profile.fields.birthday')}
+                  value={birthdayLabel}
+                  placeholder={t('profile.fields.birthdayPlaceholder')}
+                  rightIcon="calendar-today"
+                  onPress={editing ? () => setDateOpen(true) : undefined}
+                  onRightIconPress={editing ? () => setDateOpen(true) : undefined}
+                />
+                <InfoRow
+                  label={t('profile.fields.bio')}
+                  value={draft.bio}
+                  placeholder={t('profile.fields.bioPlaceholder')}
+                  editable={editing}
+                  multiline
+                  onChangeText={(v) => setDraft((d) => ({ ...d, bio: v }))}
+                  last
+                />
+              </Card>
+            </View>
+
+            {/* Preferences — onboarding answers. */}
+            <View style={styles.section}>
+              <SectionTitle>{t('profile.preferences')}</SectionTitle>
+              <Card>
+                {prefRows.map((row, i) => (
+                  <InfoRow
+                    key={row.key}
+                    label={row.label}
+                    value={row.value}
+                    placeholder={t('profile.notSet')}
+                    last={i === prefRows.length - 1}
+                  />
+                ))}
+              </Card>
+            </View>
+
+            {/* Interests chips. */}
+            <View style={styles.section}>
+              <SectionTitle>{t('profile.interests')}</SectionTitle>
+              <InterestChipList
+                interests={allInterestChips}
+                selected={interests}
+                onToggle={toggleInterest}
+                onAddMore={openAddInterest}
+                addMoreLabel={t('profile.addMore')}
               />
             </View>
-            <Pressable style={styles.settingsBtn} hitSlop={6} onPress={onOpenSettings}>
-              <Ionicons name="settings-outline" size={18} color={P.textDark} />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Identity card */}
-        <View style={styles.card}>
-          <View style={styles.avatarSection}>
-            <Pressable style={styles.avatarWrap} onPress={() => setEditingIdentity(true)}>
-              {user?.photo ? (
-                <Image source={{ uri: user.photo }} style={styles.avatarImg} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarInitial}>{initials}</Text>
-                </View>
-              )}
-              <View style={styles.avatarEditBadge}>
-                <Ionicons name="pencil" size={12} color="#ffffff" />
-              </View>
-            </Pressable>
-            <Pressable style={styles.nameRow} onPress={() => setEditingIdentity(true)}>
-              <Text style={styles.username}>@{user?.name ?? 'konnect'}</Text>
-              <Ionicons name="pencil-outline" size={18} color={P.textMuted} />
-            </Pressable>
-            <Text style={styles.memberSince}>
-              {t('profileMain.activeSince', { year: memberSinceYear })}
-            </Text>
-          </View>
-
-          <View style={styles.contactList}>
-            <View style={styles.contactRow}>
-              <View style={styles.contactLeft}>
-                <Ionicons name="mail-outline" size={16} color={P.textMuted} />
-                <Text style={styles.contactText} numberOfLines={1}>
-                  {user?.email || t('profileMain.noEmail')}
-                </Text>
-                {emailVerified && (
-                  <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-                )}
-              </View>
-              <Pressable
-                hitSlop={8}
-                onPress={() =>
-                  user?.email ? setEditTarget('backupEmail') : onStartVerify('email')
-                }
-              >
-                <Ionicons name="add" size={22} color={P.textDark} />
-              </Pressable>
-            </View>
-            {extras.backupEmail ? (
-              <View style={styles.contactRow}>
-                <View style={styles.contactLeft}>
-                  <Ionicons name="mail-outline" size={16} color={P.textMuted} />
-                  <Text style={styles.contactText} numberOfLines={1}>
-                    {extras.backupEmail}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.contactRow}>
-              <View style={styles.contactLeft}>
-                <Ionicons name="call-outline" size={16} color={P.textMuted} />
-                {maskedPhone ? (
-                  <>
-                    <Text style={styles.contactText}>{maskedPhone}</Text>
-                    {extras.phoneVerified && (
-                      <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-                    )}
-                  </>
-                ) : (
-                  <Pressable onPress={() => onStartVerify('phone')}>
-                    <Text style={styles.addLink}>{t('profileMain.addPhone')}</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          </View>
-
-          <Pressable style={styles.bioBox} onPress={() => setEditTarget('bio')}>
-            <Text style={styles.bioLabel}>{t('profileMain.bio')}</Text>
-            <Text style={extras.bio ? styles.bioText : styles.bioPlaceholder}>
-              {extras.bio || t('profileMain.bioEmpty')}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Completion card */}
-        <View style={[styles.card, styles.completionCard]}>
-          <Text style={styles.completionLabel}>
-            {t('profileMain.completion', { pct: completion })}
-          </Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${completion}%` }]} />
-          </View>
-          <Text style={styles.completionHint}>{t('profileMain.completionHint')}</Text>
-        </View>
-
-        {/* About */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('profileMain.about.title')}</Text>
-          </View>
-          <View style={styles.detailCard}>
-            <DetailRow
-              label={t('profileMain.about.currentStatus')}
-              value={statusLabel}
-              first
-              onPress={restartPersonalizationFromQuestions}
-            />
-            <DetailRow
-              label={t('profileMain.about.birthday')}
-              value={extras.birthday}
-              onPress={() => setEditTarget('birthday')}
-            />
-            <DetailRow
-              label={t('profileMain.about.occupation')}
-              value={occupationLabel}
-              onPress={restartPersonalizationFromQuestions}
-            />
-          </View>
-        </View>
-
-        {/* What I like */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('profileMain.whatILike')}</Text>
-            <Pressable hitSlop={8} onPress={restartPersonalizationFromQuestions}>
-              <Ionicons name="pencil-outline" size={16} color={P.textMuted} />
-            </Pressable>
-          </View>
-          <View style={styles.pillWrap}>
-            {interestLabels.length === 0 ? (
-              <Text style={styles.emptyHint}>{t('profileMain.emptySection')}</Text>
-            ) : (
-              interestLabels.map((label) => (
-                <View key={label} style={styles.pill}>
-                  <Text style={styles.pillText}>{label}</Text>
-                </View>
-              ))
-            )}
-          </View>
-        </View>
-
-        {/* Preferences */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('profileMain.prefs.title')}</Text>
-            <Pressable style={styles.addBtn} onPress={() => setEditTarget('food')}>
-              <Ionicons name="add" size={12} color={P.textDark} />
-              <Text style={styles.addBtnText}>{t('profileMain.add')}</Text>
-            </Pressable>
-          </View>
-          <View style={styles.detailCard}>
-            <DetailRow
-              label={t('profileMain.prefs.food')}
-              value={extras.preferences?.food}
-              first
-              onPress={() => setEditTarget('food')}
-            />
-            <DetailRow
-              label={t('profileMain.prefs.budget')}
-              value={extras.preferences?.budget}
-              onPress={() => setEditTarget('budget')}
-            />
-            <DetailRow
-              label={t('profileMain.prefs.stay')}
-              value={extras.preferences?.stay}
-              onPress={() => setEditTarget('stay')}
-            />
-          </View>
-        </View>
-
-        {/* Travel Profile (AI engine) */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('profileMain.travel.title')}</Text>
-            <Pressable hitSlop={8} onPress={restartPersonalizationFromQuestions}>
-              <Ionicons name="pencil-outline" size={16} color={P.textMuted} />
-            </Pressable>
-          </View>
-          <View style={styles.detailCard}>
-            <DetailRow
-              label={t('profileMain.travel.purpose')}
-              value={statusLabel}
-              first
-              onPress={restartPersonalizationFromQuestions}
-            />
-            <DetailRow
-              label={t('profileMain.travel.companion')}
-              value={companionLabel}
-              onPress={restartPersonalizationFromQuestions}
-            />
-            <DetailRow
-              label={t('profileMain.travel.duration')}
-              value={durationLabel}
-              onPress={restartPersonalizationFromQuestions}
-            />
-            <DetailRow
-              label={t('profileMain.travel.regions')}
-              value={regionLabels || undefined}
-              onPress={restartPersonalizationFromQuestions}
-            />
-            <DetailRow label={t('profileMain.travel.language')} value={language.label} />
-            <DetailRow
-              label={t('profileMain.travel.nationality')}
-              value={extras.nationality}
-              onPress={() => setEditTarget('nationality')}
-            />
-          </View>
-        </View>
-
-        {/* Looking For */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('profileMain.lookingFor')}</Text>
-          </View>
-          <View style={styles.pillWrap}>
-            {lookingFor.map((label) => (
-              <Pressable
-                key={label}
-                style={styles.pill}
-                onLongPress={() =>
-                  patchExtras({ lookingFor: lookingFor.filter((l) => l !== label) })
-                }
-              >
-                <Text style={styles.pillText}>{label}</Text>
-              </Pressable>
-            ))}
-            <Pressable style={[styles.pill, styles.pillAdd]} onPress={() => setEditTarget('lookingFor')}>
-              <Ionicons name="add" size={14} color={P.textMuted} />
-              <Text style={[styles.pillText, { color: P.textMuted }]}>
-                {t('profileMain.add')}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+          </>
+        )}
       </ScrollView>
 
-      {/* Username + photo editor (existing onboarding editor, reused). */}
-      <Modal
-        visible={editingIdentity}
-        animationType="slide"
-        onRequestClose={() => setEditingIdentity(false)}
-      >
-        <SafeAreaView style={styles.editSheet} edges={['top', 'left', 'right']}>
-          <ProfileSetupScreen
-            editMode
-            progress={1}
-            initialValue={(user?.name ?? '').replace(/[^A-Za-z0-9._]/g, '')}
-            initialPhotoUrl={user?.photo ?? null}
-            onBack={() => setEditingIdentity(false)}
-            onConfirm={async (username, photoUri) => {
-              try {
-                await saveProfile({ name: username, photoUri: photoUri ?? undefined });
-              } catch (e) {
-                console.warn('[Profile] save failed', e);
-              }
-              setEditingIdentity(false);
-            }}
-          />
-        </SafeAreaView>
-      </Modal>
-
-      <EditFieldModal
-        visible={editTarget != null}
-        title={editTarget ? editConfig[editTarget].title : ''}
-        placeholder={editTarget ? editConfig[editTarget].placeholder : undefined}
-        initialValue={editTarget ? editConfig[editTarget].initial : undefined}
-        multiline={editTarget ? editConfig[editTarget].multiline : false}
-        onClose={() => setEditTarget(null)}
-        onSave={onSaveEdit}
+      <AddInterestModal visible={addOpen} onClose={() => setAddOpen(false)} onAdd={addCustomInterest} />
+      <DatePickerDialog
+        visible={dateOpen}
+        value={draft.birthday}
+        onClose={() => setDateOpen(false)}
+        onSelect={(iso) => {
+          setDraft((d) => ({ ...d, birthday: iso }));
+          setDateOpen(false);
+        }}
       />
-    </View>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  first,
-  onPress,
-}: {
-  label: string;
-  value?: string;
-  first?: boolean;
-  onPress?: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Pressable
-      style={[styles.detailRow, !first && styles.detailDivider]}
-      onPress={onPress}
-      disabled={!onPress}
-    >
-      <Text style={styles.detailLabel}>{label}</Text>
-      {value ? (
-        <Text style={styles.detailValue} numberOfLines={1}>
-          {value}
-        </Text>
-      ) : (
-        <Text style={styles.detailAdd}>{onPress ? t('profileMain.add') : '—'}</Text>
-      )}
-    </Pressable>
+      <ErrorToast visible={toast != null} message={toast ?? ''} onHide={() => setToast(null)} />
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.gray[100] },
-  content: { paddingHorizontal: spacing[4], paddingTop: spacing[3], paddingBottom: 96, gap: spacing[5] },
-  topBar: {
+  screen: { flex: 1 },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing[1],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[2],
+    height: 44,
+    marginTop: spacing[4],
+    marginBottom: spacing[6],
+    paddingHorizontal: spacing[5],
   },
-  screenTitle: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 22,
-    color: P.textDark,
+  headerTitle: {
+    fontFamily: 'NationalPark_800ExtraBold',
+    fontSize: 35,
+    lineHeight: 44,
+    letterSpacing: -1.4,
+    color: colors.text.primary,
   },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
-  privacyToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  privateLabel: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    color: P.textMuted,
-  },
-  settingsBtn: {
-    padding: spacing[2],
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: P.border,
-    backgroundColor: colors.gray[100],
-  },
-  card: {
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.gray[100],
-    padding: spacing[6],
-    gap: spacing[5],
-  },
-  avatarSection: { alignItems: 'center', gap: spacing[3] },
-  avatarWrap: { width: 88, height: 88 },
-  avatarImg: { width: 88, height: 88, borderRadius: radius.md },
-  avatarFallback: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: P.border,
-    backgroundColor: P.well,
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  iconSlot: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: spacing[5], paddingBottom: spacing[24], gap: spacing[6] },
+  identity: { alignItems: 'center', paddingHorizontal: spacing[5], paddingVertical: spacing[3], gap: spacing[1] },
+  avatarWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 999,
+    backgroundColor: colors.surface.card,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing[2],
   },
-  avatarInitial: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 34,
-    color: P.textMuted,
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 24,
-    height: 24,
-    borderRadius: radius.full,
-    backgroundColor: P.dark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#ffffff',
-  },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  avatar: { width: 100, height: 100, borderRadius: 999 },
   username: {
     fontFamily: 'NationalPark_700Bold',
-    fontSize: 20,
-    color: P.textDark,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.24,
+    color: '#111827',
   },
-  memberSince: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: P.textMuted,
-  },
-  contactList: { gap: 10, paddingVertical: spacing[1] },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  contactLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-  contactText: {
-    fontFamily: 'NationalPark_500Medium',
+  // Figma contact-info (12276:94319): Inter Medium 14 — deliberately not the
+  // brand font, matching the design and the website's identity card.
+  email: {
+    fontFamily: 'Inter_500Medium',
     fontSize: 14,
-    color: P.textMuted,
-    flexShrink: 1,
-  },
-  addLink: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 14,
-    color: colors.blue[500],
-  },
-  bioBox: {
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.sm,
-    padding: spacing[4],
-    gap: 6,
-  },
-  bioLabel: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: P.textMuted,
-  },
-  bioText: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: 13,
     lineHeight: 18,
-    color: P.textDark,
+    color: '#6b7280',
+    paddingVertical: spacing[1],
   },
-  bioPlaceholder: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: 13,
-    lineHeight: 18,
-    color: P.textFaint,
-  },
-  completionCard: { padding: spacing[5], gap: spacing[2] },
-  completionLabel: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: 11,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: P.textMuted,
-  },
-  progressTrack: {
-    height: 6,
-    backgroundColor: P.well,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-    marginTop: spacing[1],
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.blue[500],
-    borderRadius: radius.full,
-  },
-  completionHint: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: 13,
-    lineHeight: 18,
-    color: P.textMuted,
-    marginTop: spacing[2],
-  },
-  section: { gap: 10 },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[1],
-  },
-  sectionTitle: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 18,
-    color: P.textDark,
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: colors.gray[100],
-  },
-  addBtnText: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 12,
-    color: P.textDark,
-  },
-  detailCard: {
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.gray[100],
-    overflow: 'hidden',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[5],
-    paddingVertical: 14,
-    gap: spacing[3],
-  },
-  detailDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: P.border },
-  detailLabel: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 11,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: P.textMuted,
-  },
-  detailValue: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 15,
-    color: P.textDark,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  detailAdd: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: 13,
-    color: colors.blue[500],
-  },
-  pillWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing[2],
-    paddingHorizontal: spacing[1],
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: P.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing[4],
-    paddingVertical: 10,
-    backgroundColor: colors.gray[100],
-  },
-  pillAdd: { borderStyle: 'dashed' },
-  pillText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 13,
-    color: P.textDark,
-  },
-  emptyHint: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: 13,
-    color: P.textFaint,
-  },
-  editSheet: { flex: 1, backgroundColor: '#fff' },
+  loading: { paddingVertical: spacing[10], alignItems: 'center' },
+  section: { gap: spacing[4] },
+  sectionTitlePad: { paddingHorizontal: spacing[1] },
 });

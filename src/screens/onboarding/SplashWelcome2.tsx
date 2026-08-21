@@ -22,7 +22,6 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-const LOGO           = onboardingSource(require('../../../assets/onboarding/logo.png') as ImageSourcePropType, 'logo');
 const ICON_PASSPORT  = onboardingSource(require('../../../assets/onboarding/signup/screen2/icon-passport.png') as ImageSourcePropType, 'signup-s2-icon-passport');
 const ICON_FOOD      = onboardingSource(require('../../../assets/onboarding/signup/screen2/icon-food.png') as ImageSourcePropType, 'signup-s2-icon-food');
 const ICON_BUS       = onboardingSource(require('../../../assets/onboarding/signup/screen2/icon-bus.png') as ImageSourcePropType, 'signup-s2-icon-bus');
@@ -186,7 +185,7 @@ export function SplashWelcome2({ onPress, active }: Props) {
         <SvgXml xml={SCREEN2_BIRD_SVG} width={sx(BIRD_W)} height={sy(BIRD_H)} />
       </Animated.View>
 
-      <Image source={LOGO} style={{ position: 'absolute', left: sx(32), top: sy(70), width: sx(92), height: sy(15) }} resizeMode="contain" />
+      {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       <Animated.View style={[styles.contentContainer, { bottom: sy(129), opacity: fadeAnim, paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>

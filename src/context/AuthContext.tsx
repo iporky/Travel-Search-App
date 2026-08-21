@@ -40,6 +40,7 @@ import { Platform } from 'react-native';
 import { addUser } from '../api/users';
 import { verifyFirebaseSso } from '../api/auth';
 import { getProfile, updateProfile } from '../api/profile';
+import { FORCE_ONBOARDING } from '../config';
 
 // Initialize the Facebook SDK once at module load (reads the app id / client
 // token from the native resources configured in AndroidManifest/strings.xml).
@@ -166,6 +167,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ? {
                     ...prev,
                     name: profile.name || prev.name,
+                    // Firebase may hand back no email (provider hid it); the
+                    // backend profile has it — History/search key off it.
+                    email: prev.email || profile.email || '',
                     // Backend pic wins; keep whatever we had if it's null.
                     photo: profile.profile_pic ?? prev.photo,
                   }
@@ -182,6 +186,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await AsyncStorage.removeItem(personalizationKey(fbUser.uid));
           setHasCompletedPersonalization(false);
           setPersonalizationStartsFromQuestions(true);
+        } else if (FORCE_ONBOARDING) {
+          // TESTING: run the full flow (intro → username → questions) on every
+          // launch, even for returning users. Controlled from src/config.
+          setHasCompletedPersonalization(false);
+          setPersonalizationStartsFromQuestions(false);
         } else {
           const done = await AsyncStorage.getItem(personalizationKey(fbUser.uid));
           setHasCompletedPersonalization(done === 'true');
@@ -500,6 +509,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ? {
                 ...prev,
                 name: profile.name || prev.name,
+                email: prev.email || profile.email || '',
                 photo: profile.profile_pic ?? prev.photo,
               }
             : prev,

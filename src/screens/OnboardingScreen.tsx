@@ -1,7 +1,9 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   FlatList,
+  Image,
   ImageSourcePropType,
   Pressable,
   StyleSheet,
@@ -20,6 +22,7 @@ import { SplashWelcome3 } from './onboarding/SplashWelcome3';
 import { SplashWelcome4 } from './onboarding/SplashWelcome4';
 import { SignIn } from './auth/SignIn';
 import { LanguageScreen } from './LanguageScreen';
+import { onboardingSource } from '../assets/onboardingAssets';
 
 // Memoized slides: they only re-render when their own `active` flag flips,
 // keeping the swipe gesture running purely on the native scroll thread.
@@ -36,6 +39,13 @@ const DESIGN_W = 375;
 const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
+
+// Rendered once, stationary, above the pager (see topBar) — the slides no
+// longer draw their own copy, so it doesn't travel with the swipe.
+const LOGO = onboardingSource(
+  require('../../assets/onboarding/logo.png') as ImageSourcePropType,
+  'logo',
+);
 
 // ─── Remote assets for slides 2-4 (Figma URLs, valid 7 days) ────────────────
 const BIRD_2 = 'https://www.figma.com/api/mcp/asset/5c8b8ff9-c8dc-46d9-b059-6549116c63f4';
@@ -135,6 +145,10 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
   const flatRef = useRef<FlatList<Slide>>(null);
+  // Horizontal scroll offset — drives the per-page slide/fade entirely on the
+  // native thread (no JS round-trip), so the transition tracks the finger at
+  // 60fps and settles with the pager's own deceleration.
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   const handleViewableChange = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -155,7 +169,7 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
   }, [onDone]);
 
   const renderItem = useCallback(
-    ({ item }: { item: Slide }) => {
+    ({ item, index }: { item: Slide; index: number }) => {
       // Memoized slides: `activeIndex` is passed as the slide's own index so the
       // prop stays constant — only the `active` boolean flip triggers a re-render.
       let slide: React.ReactNode = null;
@@ -164,14 +178,40 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
       else if (item.id === '3') slide = <MemoSplash3 activeIndex={2} active={activeIndex === 2} onPress={goNext} />;
       else if (item.id === '4') slide = <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={goNext} />;
       else if (item.id === '5') slide = <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={goNext} />;
+      // Slide-in transition: the incoming page glides in from a slight offset
+      // while fading and scaling up; the outgoing page recedes the same way.
+      // Interpolated from scrollX so it's continuous under the finger.
+      const inputRange = [(index - 1) * winW, index * winW, (index + 1) * winW];
+      const opacity = scrollX.interpolate({
+        inputRange,
+        outputRange: [0.3, 1, 0.3],
+        extrapolate: 'clamp',
+      });
+      const translateX = scrollX.interpolate({
+        inputRange,
+        outputRange: [winW * 0.2, 0, -winW * 0.2],
+        extrapolate: 'clamp',
+      });
+      const scale = scrollX.interpolate({
+        inputRange,
+        outputRange: [0.94, 1, 0.94],
+        extrapolate: 'clamp',
+      });
+
       // Each page fills the full window → background image covers the whole screen.
-      return <View style={{ width: winW, height: winH }}>{slide}</View>;
+      return (
+        <Animated.View
+          style={{ width: winW, height: winH, opacity, transform: [{ translateX }, { scale }] }}
+        >
+          {slide}
+        </Animated.View>
+      );
     },
-    [activeIndex, goNext, winW, winH],
+    [activeIndex, goNext, winW, winH, scrollX],
   );
   return (
     <View style={styles.container}>
-      <FlatList
+      <Animated.FlatList
         ref={flatRef}
         data={SLIDES}
         keyExtractor={(s) => s.id}
@@ -179,6 +219,9 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+          useNativeDriver: true,
+        })}
         onViewableItemsChanged={handleViewableChange}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
         getItemLayout={(_, index) => ({ length: winW, offset: winW * index, index })}
@@ -195,11 +238,15 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         scrollEventThrottle={16}
       />
 
-      {/* Language selector — visible on every splash page */}
-      <Pressable onPress={() => setShowLanguage(true)} style={styles.languageBtn} hitSlop={8}>
-        <Ionicons name="globe-outline" size={sx(18)} color={colors.gray[900]} />
-        <Text style={styles.languageCode}>{langPrefix}</Text>
-      </Pressable>
+      {/* Static top bar — logo (left) and language selector (right) share one
+          baseline and stay put while the pages slide underneath. */}
+      <View style={styles.topBar} pointerEvents="box-none">
+        <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+        <Pressable onPress={() => setShowLanguage(true)} style={styles.languageBtn} hitSlop={8}>
+          <Ionicons name="globe-outline" size={sx(18)} color={colors.gray[900]} />
+          <Text style={styles.languageCode}>{langPrefix}</Text>
+        </Pressable>
+      </View>
 
       {/* Stationary pagination dots. The Skip / Get started button was removed
           (first demo release), so the dots drop down to keep proper bottom
@@ -227,17 +274,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#eaf4ff' },
   slidePressable: { width: W, height: H },
   slide: { width: W, height: H },
-  languageBtn: {
+  // Figma: logo at (32, 70) 92×15, language pill top-right. One row, both
+  // vertically centred, so they read as a single header line.
+  topBar: {
     position: 'absolute',
     top: sy(58),
+    left: sx(32),
     right: sx(20),
+    height: sx(32),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 30,
+  },
+  logo: { width: sx(92), height: sy(15) },
+  languageBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: sx(4),
     height: sx(32),
     paddingHorizontal: sx(6),
     borderRadius: 999,
-    zIndex: 30,
   },
   languageCode: {
     fontFamily: 'NationalPark_600SemiBold',

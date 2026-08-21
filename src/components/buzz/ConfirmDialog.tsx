@@ -75,9 +75,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(29,25,43,0.45)',
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // Figma Dialog (11336:76233): 300 wide, radius 24, header pt 28 / px 20.
   card: {
-    width: '88%',
-    maxWidth: 340,
+    width: 300,
+    maxWidth: '92%',
     backgroundColor: colors.gray[100],
     borderRadius: radius['2xl'],
     overflow: 'hidden',

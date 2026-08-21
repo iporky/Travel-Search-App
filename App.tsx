@@ -1,9 +1,12 @@
-import React, { useEffect, useState, Component } from 'react';
+import React, { useEffect, useRef, useState, Component } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, NationalPark_400Regular, NationalPark_500Medium, NationalPark_600SemiBold, NationalPark_700Bold, NationalPark_800ExtraBold } from '@expo-google-fonts/national-park';
+// The Profile identity card's email line is Inter in the design (12276:94319).
+// Subpath import so Metro bundles only this one weight, not all 36 Inter files.
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 // Freeze text at its designed size regardless of the phone's font/display
 // settings — must run before any Text/TextInput renders.
 import './src/utils/lockFontScaling';
@@ -11,7 +14,7 @@ import './src/i18n';
 
 import { TabBar, TabKey } from './src/components/TabBar';
 import { HomeScreen } from './src/screens/HomeScreen';
-import { BuzzScreen } from './src/screens/BuzzScreen';
+import { EventsScreen } from './src/screens/EventsScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
@@ -20,6 +23,7 @@ import { gradients } from './src/theme/tokens';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LanguageProvider } from './src/context/LanguageContext';
 import { preloadAppAssets } from './src/assets/preload';
+import { trackPageView } from './src/api/tracking';
 import { ScreenTransition } from './src/components/ScreenTransition';
 
 // ── Error boundary: shows the JS error on-screen instead of crashing ─────────
@@ -69,6 +73,18 @@ function AppContent() {
   // Buzz detail/compose screens go full-bleed (over the tab bar) so their inputs
   // can sit flush on the keyboard.
   const [buzzFullScreen, setBuzzFullScreen] = useState(false);
+  // Set when another tab asks Home to run a search (About page's place name).
+  const [homeQuery, setHomeQuery] = useState<string | null>(null);
+
+  // One page_view tracking row per tab visit (source_type page_view, updated
+  // Tracking contract) — referrer = the previous tab's path, GA-style.
+  const prevPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || !hasCompletedPersonalization) return;
+    const path = '/' + tab;
+    trackPageView(path, prevPathRef.current ?? undefined);
+    prevPathRef.current = path;
+  }, [tab, user, hasCompletedPersonalization]);
 
   // Wait for AsyncStorage to load persisted auth before rendering
   if (isLoading) return null;
@@ -96,10 +112,21 @@ function AppContent() {
           <View style={styles.flex}>
             {/* Cross-fade between tabs instead of snapping. */}
             <ScreenTransition transitionKey={tab}>
-              {tab === 'home' && <HomeScreen />}
-              {tab === 'buzz' && <BuzzScreen onFullScreen={setBuzzFullScreen} />}
+              {tab === 'home' && (
+                <HomeScreen initialQuery={homeQuery} onInitialQueryConsumed={() => setHomeQuery(null)} />
+              )}
+              {tab === 'events' && <EventsScreen onFullScreen={setBuzzFullScreen} />}
               {tab === 'history' && <HistoryScreen onFullScreen={setBuzzFullScreen} />}
-              {tab === 'profile' && <ProfileScreen onFullScreen={setBuzzFullScreen} />}
+              {tab === 'profile' && (
+                <ProfileScreen
+                  onFullScreen={setBuzzFullScreen}
+                  onNavigateHome={(q) => {
+                    if (q) setHomeQuery(q);
+                    setBuzzFullScreen(false);
+                    setTab('home');
+                  }}
+                />
+              )}
             </ScreenTransition>
           </View>
         </SafeAreaView>
@@ -142,6 +169,7 @@ export default function App() {
     NationalPark_600SemiBold,
     NationalPark_700Bold,
     NationalPark_800ExtraBold,
+    Inter_500Medium,
   });
   const [assetsLoaded, setAssetsLoaded] = useState(false);
 
