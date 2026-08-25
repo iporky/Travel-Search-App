@@ -46,6 +46,6 @@ yarn-error.*
 /google-services.json
 /GoogleService-Info.plist
 
-# Release builds — kept locally in release/, too large for git history
-/release/*.apk
-/release/*.aab
+# Build artifacts — never committed, from any folder (kept locally in release/)
+*.apk
+*.aab
