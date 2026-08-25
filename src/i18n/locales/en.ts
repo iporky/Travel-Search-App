@@ -494,6 +494,11 @@ const en = {
     permissionDenied: 'Microphone permission denied',
   },
   search: {
+    searchingFor: 'Searching for',
+    cantAnswerTitle: 'We can’t answer that query',
+    tryDifferent: 'Try a different question — a few suggestions are listed below.',
+    reference: 'Reference',
+    koreanLaw: 'Korean law',
     title: 'Answer',
     thinking: 'Thinking...',
     sources: 'Sources',

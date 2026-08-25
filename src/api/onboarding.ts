@@ -11,6 +11,7 @@ import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import DeviceInfo from 'react-native-device-info';
 import { Platform } from 'react-native';
 import { AUTH_API_URL } from '../config';
+import { track } from './tracking';
 import {
   DESTINATION_FROM_BACKEND,
   DESTINATION_TO_BACKEND,
@@ -346,6 +347,7 @@ export async function getOnboarding(): Promise<OnboardingRecord | null> {
 
   if (res.status === 404) {
     console.log('[api] getOnboarding — no existing record');
+    lastKnownRecord = null;
     return null;
   }
   if (!res.ok) {
@@ -354,7 +356,55 @@ export async function getOnboarding(): Promise<OnboardingRecord | null> {
   }
   const data = (await res.json().catch(() => null)) as OnboardingRecord | null;
   console.log('[api] getOnboarding ✓', JSON.stringify(data));
+  lastKnownRecord = data;
   return data;
+}
+
+// ── Onboarding edit tracking (contract rows 9a–9h) ───────────────────────────
+// One edit_profile_onboarding event per field that actually CHANGED versus the
+// last-known server record, fired after a successful PATCH (never on the
+// first-time POST create — these are edit events). The baseline advances with
+// every save so a multi-Confirm session doesn't re-report earlier changes.
+let lastKnownRecord: OnboardingRecord | null = null;
+
+const sameSet = (a?: string[], b?: string[]) => {
+  const A = new Set(a ?? []);
+  const B = new Set(b ?? []);
+  return A.size === B.size && [...A].every((x) => B.has(x));
+};
+
+function fireOnboardingEditEvents(
+  prev: OnboardingRecord,
+  body: ReturnType<typeof buildOnboardingBody>,
+) {
+  const changed = (v: string | undefined, old: string | undefined) =>
+    v !== undefined && v !== '' && v !== (old ?? undefined) && !(old == null && v === '');
+  if (changed(body.username, prev.username)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_username');
+  }
+  if (changed(body.preferred_language, prev.preferred_language)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_preferred_language');
+  }
+  if (changed(body.purpose, prev.purpose)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_purpose');
+  }
+  const prevCtx = prev.context ?? {};
+  const bodyCtx = body.context as { reason?: string; duration?: string };
+  if (changed(bodyCtx.reason, prevCtx.reason)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_context_reason');
+  }
+  if (changed(bodyCtx.duration, prevCtx.duration)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_context_duration');
+  }
+  if (!sameSet(body.destinations, prev.destinations)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_destinations');
+  }
+  if (!sameSet(body.interests, prev.interests)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_interests');
+  }
+  if (changed(body.platform, prev.platform)) {
+    track.profileEdit('edit_profile_onboarding', 'onboarding_platform');
+  }
 }
 
 /**
@@ -422,4 +472,24 @@ export async function saveOnboarding(
     throw new Error(`saveOnboarding(${args.method}) failed: HTTP ${res.status} ${text.slice(0, 200)}`);
   }
   console.log(`[api] saveOnboarding(${args.method}) ✓`);
+
+  // Contract rows 9a–9h: report which onboarding fields this save changed.
+  if (args.method === 'PATCH' && lastKnownRecord) {
+    try {
+      fireOnboardingEditEvents(lastKnownRecord, body);
+    } catch (e) {
+      console.warn('[api] onboarding edit tracking failed', (e as Error)?.message ?? e);
+    }
+  }
+  // Advance the baseline so the next Confirm diffs against what's now stored.
+  lastKnownRecord = {
+    ...(lastKnownRecord ?? {}),
+    username: body.username,
+    preferred_language: body.preferred_language,
+    purpose: body.purpose,
+    context: { ...(lastKnownRecord?.context ?? {}), ...(body.context as object) },
+    destinations: body.destinations,
+    interests: body.interests,
+    platform: body.platform,
+  };
 }

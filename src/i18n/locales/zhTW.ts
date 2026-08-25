@@ -490,6 +490,11 @@ const zhTW = {
     permissionDenied: '麥克風權限遭拒',
   },
   search: {
+    searchingFor: '正在搜尋',
+    cantAnswerTitle: '無法回答該問題',
+    tryDifferent: '請嘗試其他問題——下方列出了一些建議。',
+    reference: '參考資料',
+    koreanLaw: '韓國法律',
     title: '答案',
     thinking: '思考中...',
     sources: '來源',

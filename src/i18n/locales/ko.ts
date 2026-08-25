@@ -490,6 +490,11 @@ const ko = {
     permissionDenied: '마이크 권한이 필요합니다',
   },
   search: {
+    searchingFor: '검색 중',
+    cantAnswerTitle: '답변할 수 없는 질문이에요',
+    tryDifferent: '다른 질문을 시도해 보세요. 아래에 몇 가지 제안이 있어요.',
+    reference: '참고 자료',
+    koreanLaw: '한국 법령',
     title: '답변',
     thinking: '생각 중...',
     sources: '출처',

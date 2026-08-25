@@ -490,6 +490,11 @@ const vi = {
     permissionDenied: 'Quyền truy cập micrô bị từ chối',
   },
   search: {
+    searchingFor: 'Đang tìm kiếm',
+    cantAnswerTitle: 'Chúng tôi không thể trả lời câu hỏi này',
+    tryDifferent: 'Hãy thử một câu hỏi khác — một vài gợi ý được liệt kê bên dưới.',
+    reference: 'Tài liệu tham khảo',
+    koreanLaw: 'Luật Hàn Quốc',
     title: 'Câu trả lời',
     thinking: 'Đang suy nghĩ...',
     sources: 'Nguồn',

@@ -13,6 +13,7 @@ import './src/utils/lockFontScaling';
 import './src/i18n';
 
 import { TabBar, TabKey } from './src/components/TabBar';
+import { IntroSplash } from './src/screens/IntroSplash';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
@@ -172,12 +173,18 @@ export default function App() {
     Inter_500Medium,
   });
   const [assetsLoaded, setAssetsLoaded] = useState(false);
+  // Intro bird animation — the first thing shown on every app open. Fonts and
+  // assets keep loading behind it, so by the time it ends (~6 s) the welcome
+  // screens are warm.
+  const [introDone, setIntroDone] = useState(false);
 
   // Preload every static image once — screens only render after this resolves
   // so no page ever appears with half-loaded assets.
   useEffect(() => {
     preloadAppAssets().then(() => setAssetsLoaded(true));
   }, []);
+
+  if (!introDone) return <IntroSplash onDone={() => setIntroDone(true)} />;
 
   if (!fontsLoaded || !assetsLoaded) return null;
 

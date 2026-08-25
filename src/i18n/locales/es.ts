@@ -490,6 +490,11 @@ const es = {
     permissionDenied: 'Permiso del micrófono denegado',
   },
   search: {
+    searchingFor: 'Buscando',
+    cantAnswerTitle: 'No podemos responder a esa consulta',
+    tryDifferent: 'Prueba con otra pregunta: abajo encontrarás algunas sugerencias.',
+    reference: 'Referencia',
+    koreanLaw: 'Ley coreana',
     title: 'Respuesta',
     thinking: 'Pensando...',
     sources: 'Fuentes',

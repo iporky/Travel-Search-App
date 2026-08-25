@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
-  Easing,
   Image,
   ImageSourcePropType,
   Linking,
@@ -27,6 +25,9 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { onboardingSource } from '../assets/onboardingAssets';
+import { trackEvent } from '../api/tracking';
+import { openTaxiBooking } from '../utils/taxiBooking';
+import { FormattedSummary } from '../components/FormattedAnswer';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -39,6 +40,50 @@ const BIRD = onboardingSource(
   'bird-hero',
 );
 
+// Ported from the website (konnect_react searchAPI.js): every answer promotes
+// the taxi service and nothing else — pinned so it shows from the first frame,
+// even before (or without) a service_recommendations event. Whatever the
+// backend sends for that event is ignored.
+const PINNED_RECOMMENDATIONS: ServiceRecommendation[] = [
+  {
+    service_key: 'taxi',
+    display_name: '',
+    emoji: '🚕',
+    title: 'Book a taxi',
+    body: 'Available 24/7 with English-speaking drivers.',
+    deep_link_url: 'konnect://services/taxi',
+    deep_link_label: 'Book a Taxi',
+  },
+];
+
+/** Backend blocked/failed to validate the query (gibberish, unsafe, illegal). */
+interface ValidationError {
+  message: string;
+  severity: string;
+  legal_reference: string | null;
+  source: string | null;
+  korean_law_url: string | null;
+}
+
+/** Normalize the stream's search_queries shapes to a string list (web parity). */
+function normalizeSearchQueries(data: any): string[] {
+  let raw: any[] = [];
+  if (Array.isArray(data)) raw = data;
+  else if (data && typeof data === 'object') {
+    if (Array.isArray(data.queries)) raw = data.queries;
+    else if (Array.isArray(data.search_queries)) raw = data.search_queries;
+    else {
+      const en = Array.isArray(data.en) ? data.en : [];
+      const kr = Array.isArray(data.kr) ? data.kr : [];
+      const others = Object.entries(data)
+        .filter(([k, v]) => Array.isArray(v) && k !== 'en' && k !== 'kr')
+        .flatMap(([, v]) => v as any[]);
+      raw = [...en, ...kr, ...others];
+    }
+  }
+  return raw.map((q) => (typeof q === 'string' ? q : q?.query || q?.text || '')).filter(Boolean);
+}
+
 interface Props {
   query: string;
   onBack: () => void;
@@ -46,55 +91,8 @@ interface Props {
   onAsk: (query: string) => void;
 }
 
-// ── Lightweight renderer for the summary's markdown-ish text ────────────────
-// Handles: "### " headings, "- " bullets, **bold** inline, [Web N] citations.
-function InlineText({ text, style }: { text: string; style: any }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\[Web \d+\])/g).filter(Boolean);
-  return (
-    <Text style={style}>
-      {parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return (
-            <Text key={i} style={mdStyles.bold}>
-              {part.slice(2, -2)}
-            </Text>
-          );
-        }
-        if (/^\[Web \d+\]$/.test(part)) {
-          return (
-            <Text key={i} style={mdStyles.citation}>
-              {' '}{part}
-            </Text>
-          );
-        }
-        return <Text key={i}>{part}</Text>;
-      })}
-    </Text>
-  );
-}
-
-function FormattedSummary({ text }: { text: string }) {
-  const blocks = useMemo(() => text.split('\n').map((l) => l.trimEnd()), [text]);
-  return (
-    <View style={mdStyles.container}>
-      {blocks.map((line, i) => {
-        if (!line.trim()) return <View key={i} style={mdStyles.gap} />;
-        if (line.startsWith('### ')) {
-          return <InlineText key={i} text={line.slice(4)} style={mdStyles.h3} />;
-        }
-        if (line.startsWith('- ')) {
-          return (
-            <View key={i} style={mdStyles.bulletRow}>
-              <Text style={mdStyles.bulletDot}>•</Text>
-              <InlineText text={line.slice(2)} style={[mdStyles.body, mdStyles.bulletText]} />
-            </View>
-          );
-        }
-        return <InlineText key={i} text={line} style={mdStyles.body} />;
-      })}
-    </View>
-  );
-}
+// The markdown-ish answer renderer is shared with the History accordion —
+// see src/components/FormattedAnswer.tsx.
 
 export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const { t } = useTranslation();
@@ -102,8 +100,12 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const { language } = useLanguage();
 
   const [streaming, setStreaming] = useState(true);
-  const [progress, setProgress] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<ServiceRecommendation[]>([]);
+  // Enforced taxi card — never replaced by backend payloads (web parity).
+  const recommendations = PINNED_RECOMMENDATIONS;
+  const [category, setCategory] = useState<string | null>(null);
+  const [searchQueries, setSearchQueries] = useState<string[]>([]);
+  const [tickerIdx, setTickerIdx] = useState(0);
+  const [validationError, setValidationError] = useState<ValidationError | null>(null);
   const [summary, setSummary] = useState('');
   const [sources, setSources] = useState<SearchSource[]>([]);
   const [followups, setFollowups] = useState<string[]>([]);
@@ -113,25 +115,16 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   // One session id per screen instance so follow-ups share a session.
   const sessionId = useRef(makeSessionId()).current;
 
-  // Gentle bobbing for the mascot while the pipeline works.
-  const bob = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bob, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(bob, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [bob]);
-  const bobY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -sy(10)] });
+  // "Searching for" ticker fade (web crossfades queries every 1.6 s, looping).
+  const tickerOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Reset per query.
     setStreaming(true);
-    setProgress(null);
-    setRecommendations([]);
+    setCategory(null);
+    setSearchQueries([]);
+    setTickerIdx(0);
+    setValidationError(null);
     setSummary('');
     setSources([]);
     setFollowups([]);
@@ -150,13 +143,18 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
       {
         onEvent: (event) => {
           switch (event.type) {
-            case 'worker_progress':
-              if (event.data?.message) setProgress(String(event.data.message));
+            case 'category': {
+              const label = event.data?.display_name || event.data?.category;
+              if (label) setCategory(String(label).replace(/_/g, ' '));
               break;
+            }
+            case 'search_queries': {
+              const list = normalizeSearchQueries(event.data);
+              if (list.length) setSearchQueries(list);
+              break;
+            }
             case 'service_recommendations':
-              if (Array.isArray(event.data?.recommendations)) {
-                setRecommendations(event.data.recommendations);
-              }
+              // Deliberately ignored — the taxi card is pinned (web parity).
               break;
             case 'final_summary_chunk':
               if (event.data?.chunk) setSummary((prev) => prev + event.data.chunk);
@@ -164,31 +162,53 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
             case 'final_summary':
               // Authoritative full text — replaces accumulated chunks.
               if (event.data?.summary) setSummary(event.data.summary);
+              else if (event.data?.text) setSummary(event.data.text);
               if (Array.isArray(event.data?.sources)) setSources(event.data.sources);
-              setProgress(null);
+              break;
+            case 'summary':
+              // Emergency-style responses use `summary` as the canonical
+              // answer instead of final_summary (web parity).
+              if (event.data?.summary || event.data?.text) {
+                setSummary(event.data.summary || event.data.text);
+              }
+              if (event.data?.status === 'completed') setStreaming(false);
               break;
             case 'followup_questions':
               if (Array.isArray(event.data?.questions)) setFollowups(event.data.questions);
+              else if (Array.isArray(event.data)) setFollowups(event.data);
               break;
             case 'confidence_indicator':
               setConfidence(event.data);
               break;
+            case 'validation_error':
+              // Backend rejected the query (gibberish / unsafe / illegal).
+              // Renders the web's error card; the stream keeps flowing so the
+              // safer follow-up suggestions after it still arrive.
+              setValidationError({
+                message: event.data?.message || 'This query could not be processed.',
+                severity: event.data?.severity || 'error',
+                legal_reference: event.data?.legal_reference ?? null,
+                source: event.data?.source ?? null,
+                korean_law_url: event.data?.korean_law_url ?? null,
+              });
+              break;
             case 'metadata':
-              setStreaming(false);
-              setProgress(null);
+              // Only `completed` terminates. `validation_failed` arrives
+              // BEFORE the validation_error payload — stopping here would
+              // leave a blank screen (web parity).
+              if (event.data?.status === 'completed') setStreaming(false);
               break;
             default:
-              // category, search_queries, keepalive, quality_score, … — not rendered.
+              // worker_progress, keepalive, quality_score, … — the design
+              // shows only "Searching for" while in flight (web parity).
               break;
           }
         },
         onDone: () => {
           setStreaming(false);
-          setProgress(null);
         },
         onError: (e) => {
           setStreaming(false);
-          setProgress(null);
           // Show translated copy; the raw exception goes to the log, not the UI.
           console.warn('[search] stream failed', e);
           setError(true);
@@ -200,11 +220,39 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  // Rotate through the streamed search queries while waiting — loops rather
+  // than resting on the last one, until the answer itself appears (web parity).
+  useEffect(() => {
+    if (searchQueries.length < 2 || summary || validationError) return;
+    const id = setTimeout(() => {
+      Animated.timing(tickerOpacity, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
+        setTickerIdx((i) => (i + 1) % searchQueries.length);
+        Animated.timing(tickerOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+      });
+    }, 1600);
+    return () => clearTimeout(id);
+  }, [searchQueries, tickerIdx, summary, validationError, tickerOpacity]);
+
   const openUrl = (url: string) => {
     Linking.openURL(url).catch(() => {});
   };
 
-  const showLoadingHero = streaming && !summary && recommendations.length === 0 && !error;
+  // The taxi card is the one recommendation that counts as a cab booking
+  // click: attribute it to this search session, then open the search-surface
+  // Kakao booking link — tracking never gates the navigation (web parity).
+  const onRecommendationPress = (rec: ServiceRecommendation) => {
+    if (rec.service_key === 'taxi') {
+      trackEvent({ event_type: 'cab_booking_click', source_type: 'search', source_id: sessionId });
+      openTaxiBooking('search');
+      return;
+    }
+    if (rec.deep_link_url && /^https?:/i.test(rec.deep_link_url)) openUrl(rec.deep_link_url);
+  };
+
+  const currentQuery = searchQueries.length
+    ? searchQueries[tickerIdx % searchQueries.length]
+    : null;
+  const showEarlyStrip = streaming && !summary && !validationError && (category || currentQuery);
 
   return (
     <View style={styles.root}>
@@ -231,44 +279,90 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
             <Text style={styles.queryText}>{query}</Text>
           </View>
 
-          {/* Service recommendation cards — often the first thing to arrive */}
-          {recommendations.map((rec) => (
-            <View key={rec.service_key} style={styles.recCard}>
-              <View style={styles.recHeader}>
-                <Text style={styles.recEmoji}>{rec.emoji}</Text>
-                <View style={styles.flex}>
-                  <Text style={styles.recTitle}>{rec.title}</Text>
-                  <Text style={styles.recBrand}>{rec.display_name}</Text>
+          {/* Early preview (web StreamingSearchTemplate): category chip +
+              "Searching for <query>" ticker — the only in-flight indicator. */}
+          {showEarlyStrip ? (
+            <View style={styles.earlyStrip}>
+              {category ? (
+                <View style={styles.categoryChip}>
+                  <Text style={styles.categoryChipText}>{category}</Text>
                 </View>
-              </View>
-              <Text style={styles.recBody}>{rec.body.trim()}</Text>
-              <Pressable style={styles.recBtn} onPress={() => openUrl(rec.deep_link_url)}>
-                <Text style={styles.recBtnText}>{rec.deep_link_label}</Text>
-                <Ionicons name="arrow-forward" size={sx(14)} color="#fff" />
-              </Pressable>
-            </View>
-          ))}
-
-          {/* Loading hero while nothing has arrived yet */}
-          {showLoadingHero ? (
-            <View style={styles.loadingWrap}>
-              <Animated.Image
-                source={BIRD}
-                style={[styles.loadingBird, { transform: [{ translateY: bobY }] }]}
-                resizeMode="contain"
-              />
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color="#527dff" />
-                <Text style={styles.loadingText}>{progress ?? t('search.thinking')}</Text>
-              </View>
+              ) : null}
+              {currentQuery ? (
+                <View style={styles.searchingRow}>
+                  <Text style={styles.searchingLabel}>{t('search.searchingFor')}</Text>
+                  <Animated.View style={[styles.queryChip, { opacity: tickerOpacity }]}>
+                    <Ionicons name="search" size={sx(12)} color="#3289C9" />
+                    <Text style={styles.queryChipText} numberOfLines={1}>
+                      {currentQuery}
+                    </Text>
+                  </Animated.View>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
-          {/* Live pipeline progress while the answer is still being built */}
-          {!showLoadingHero && streaming && progress ? (
-            <View style={styles.progressRow}>
-              <ActivityIndicator size="small" color="#527dff" />
-              <Text style={styles.progressText}>{progress}</Text>
+          {/* Enforced service CTA (web ServiceCTA): pinned taxi card, visible
+              from the first frame and above the answer once it streams in. */}
+          {!validationError &&
+            recommendations.map((rec) => (
+              <View key={rec.service_key} style={styles.ctaCard}>
+                <View style={styles.ctaEmojiWell}>
+                  <Text style={styles.ctaEmoji}>{rec.emoji}</Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.ctaTitle}>{rec.title}</Text>
+                  {rec.body ? (
+                    <Text style={styles.ctaBody} numberOfLines={2}>
+                      {rec.body.trim()}
+                    </Text>
+                  ) : null}
+                  <Pressable style={styles.ctaBtn} onPress={() => onRecommendationPress(rec)}>
+                    <Text style={styles.ctaBtnText}>{rec.deep_link_label}</Text>
+                    <Ionicons name="arrow-forward" size={sx(13)} color="#fff" />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+
+          {/* Validation / policy block (web): the backend rejected the query —
+              gibberish, unsafe or illegal content. */}
+          {validationError ? (
+            <View
+              style={[
+                styles.validationCard,
+                validationError.severity === 'critical' && styles.validationCardCritical,
+              ]}
+            >
+              <View style={styles.validationHeader}>
+                <Ionicons
+                  name="warning-outline"
+                  size={sx(20)}
+                  color={validationError.severity === 'critical' ? '#d32f2f' : '#ed6c02'}
+                />
+                <Text style={styles.validationTitle}>{t('search.cantAnswerTitle')}</Text>
+              </View>
+              <Text style={styles.validationMessage}>{validationError.message}</Text>
+              {(validationError.legal_reference || validationError.source || validationError.korean_law_url) ? (
+                <View style={styles.validationMetaRow}>
+                  {validationError.legal_reference ? (
+                    <View style={styles.validationChip}>
+                      <Text style={styles.validationChipText}>{validationError.legal_reference}</Text>
+                    </View>
+                  ) : null}
+                  {validationError.source ? (
+                    <Pressable hitSlop={6} onPress={() => openUrl(validationError.source!)}>
+                      <Text style={styles.validationLink}>{t('search.reference')}</Text>
+                    </Pressable>
+                  ) : null}
+                  {validationError.korean_law_url ? (
+                    <Pressable hitSlop={6} onPress={() => openUrl(validationError.korean_law_url!)}>
+                      <Text style={styles.validationLink}>{t('search.koreanLaw')}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+              <Text style={styles.validationHint}>{t('search.tryDifferent')}</Text>
             </View>
           ) : null}
 
@@ -281,7 +375,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
           ) : null}
 
           {/* Answer card */}
-          {summary ? (
+          {summary && !validationError ? (
             <View style={styles.answerCard}>
               <View style={styles.answerHeader}>
                 <Image source={BIRD} style={styles.answerAvatar} resizeMode="contain" />
@@ -343,39 +437,6 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   );
 }
 
-const mdStyles = StyleSheet.create({
-  container: { gap: sy(2) },
-  gap: { height: sy(10) },
-  h3: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(16),
-    lineHeight: sy(24),
-    color: '#1d192b',
-    letterSpacing: -0.16,
-    marginTop: sy(6),
-  },
-  body: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: sx(15),
-    lineHeight: sy(24),
-    color: '#1d192b',
-    letterSpacing: -0.1,
-  },
-  bold: { fontFamily: 'NationalPark_700Bold' },
-  citation: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(11),
-    color: '#527dff',
-  },
-  bulletRow: { flexDirection: 'row', gap: sx(8), paddingRight: sx(8) },
-  bulletDot: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(15),
-    lineHeight: sy(24),
-    color: '#527dff',
-  },
-  bulletText: { flex: 1 },
-});
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, zIndex: 50, elevation: 50 },
@@ -425,80 +486,142 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
   },
 
-  recCard: {
-    backgroundColor: '#fff',
-    borderRadius: sx(18),
-    padding: sx(16),
-    marginBottom: sy(14),
-    shadowColor: '#0077ff',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  // Early preview (web): category chip + "Searching for" ticker.
+  earlyStrip: { marginBottom: sy(12), gap: sy(8) },
+  categoryChip: {
+    alignSelf: 'flex-start',
+    height: sy(22),
+    paddingHorizontal: sx(10),
+    borderRadius: 999,
+    backgroundColor: '#e8f1fb',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  recHeader: { flexDirection: 'row', alignItems: 'center', gap: sx(10) },
-  recEmoji: { fontSize: sx(28) },
-  recTitle: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(16),
-    color: '#1d192b',
-    letterSpacing: -0.16,
+  categoryChipText: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(11),
+    color: '#0d47a1',
+    textTransform: 'capitalize',
   },
-  recBrand: {
+  searchingRow: { flexDirection: 'row', alignItems: 'center', gap: sx(8), minHeight: sy(26) },
+  searchingLabel: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(11),
+    color: '#90a4ae',
+  },
+  queryChip: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sx(5),
+    height: sy(24),
+    paddingHorizontal: sx(8),
+    borderRadius: 999,
+    backgroundColor: '#f4f7fa',
+    borderWidth: 1,
+    borderColor: '#e1e8ef',
+  },
+  queryChipText: {
+    flexShrink: 1,
     fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(12),
-    color: '#657586',
+    fontSize: sx(11),
+    color: '#37474f',
   },
-  recBody: {
+
+  // Service CTA (web ServiceCTA): light-blue gradient card, emoji well, pill CTA.
+  ctaCard: {
+    flexDirection: 'row',
+    gap: sx(10),
+    padding: sx(12),
+    borderRadius: sx(10),
+    borderWidth: 1,
+    borderColor: '#d0e7ff',
+    backgroundColor: '#f0f8ff',
+    marginBottom: sy(14),
+  },
+  ctaEmojiWell: {
+    width: sx(36),
+    height: sx(36),
+    borderRadius: 999,
+    backgroundColor: '#d9eafc',
+    borderWidth: 1,
+    borderColor: '#90caf9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaEmoji: { fontSize: sx(20) },
+  ctaTitle: {
+    fontFamily: 'NationalPark_700Bold',
+    fontSize: sx(13),
+    lineHeight: sy(17),
+    color: '#0d47a1',
+    marginBottom: sy(2),
+  },
+  ctaBody: {
     fontFamily: 'NationalPark_400Regular',
-    fontSize: sx(14),
-    lineHeight: sy(20),
-    color: '#3a4657',
-    marginTop: sy(8),
+    fontSize: sx(12),
+    lineHeight: sy(17),
+    color: '#37474f',
+    marginBottom: sy(8),
   },
-  recBtn: {
+  ctaBtn: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: sx(6),
-    backgroundColor: '#527dff',
+    gap: sx(5),
+    backgroundColor: '#1565c0',
     borderRadius: 999,
-    paddingVertical: sy(8),
-    paddingHorizontal: sx(16),
-    marginTop: sy(12),
+    paddingVertical: sy(5),
+    paddingHorizontal: sx(12),
   },
-  recBtnText: {
+  ctaBtnText: {
     fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(13),
+    fontSize: sx(12),
     color: '#fff',
-    letterSpacing: -0.13,
   },
 
-  loadingWrap: {
-    alignItems: 'center',
-    paddingTop: sy(40),
-    gap: sy(20),
+  // Validation / policy card (web Alert): amber (warning) or red (critical).
+  validationCard: {
+    borderWidth: 1,
+    borderColor: '#ffcc80',
+    backgroundColor: '#fff8ec',
+    borderRadius: sx(10),
+    padding: sx(14),
+    marginBottom: sy(14),
+    gap: sy(8),
   },
-  loadingBird: { width: sx(120), height: sy(96) },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: sx(10) },
-  loadingText: {
-    fontFamily: 'NationalPark_500Medium',
+  validationCardCritical: { borderColor: '#ef9a9a', backgroundColor: '#fdf0ef' },
+  validationHeader: { flexDirection: 'row', alignItems: 'center', gap: sx(8) },
+  validationTitle: {
+    flex: 1,
+    fontFamily: 'NationalPark_700Bold',
     fontSize: sx(15),
-    color: '#657586',
+    color: '#5d4037',
+    letterSpacing: -0.15,
   },
-
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: sx(10),
-    paddingVertical: sy(10),
-    paddingHorizontal: sx(4),
-  },
-  progressText: {
-    fontFamily: 'NationalPark_500Medium',
+  validationMessage: {
+    fontFamily: 'NationalPark_400Regular',
     fontSize: sx(13),
-    color: '#657586',
+    lineHeight: sy(19),
+    color: '#4e342e',
   },
+  validationMetaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: sx(8) },
+  validationChip: {
+    height: sy(22),
+    paddingHorizontal: sx(8),
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  validationChipText: { fontFamily: 'NationalPark_500Medium', fontSize: sx(11), color: '#4e342e' },
+  validationLink: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(12),
+    color: '#1565c0',
+    textDecorationLine: 'underline',
+  },
+  validationHint: { fontFamily: 'NationalPark_500Medium', fontSize: sx(11), color: '#5d4037' },
 
   errorCard: {
     flexDirection: 'row',

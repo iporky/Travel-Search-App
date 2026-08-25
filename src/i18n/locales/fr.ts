@@ -490,6 +490,11 @@ const fr = {
     permissionDenied: 'Autorisation du microphone refusée',
   },
   search: {
+    searchingFor: 'Recherche de',
+    cantAnswerTitle: 'Nous ne pouvons pas répondre à cette requête',
+    tryDifferent: 'Essayez une autre question — quelques suggestions figurent ci-dessous.',
+    reference: 'Référence',
+    koreanLaw: 'Droit coréen',
     title: 'Réponse',
     thinking: 'Réflexion...',
     sources: 'Sources',

@@ -7,6 +7,7 @@ import {
   Image,
   ImageSourcePropType,
   Keyboard,
+  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -38,6 +39,28 @@ const sy = (n: number) => (n * H) / DESIGN_H;
 const SEARCH_MIN_HEIGHT = sy(68);
 const SEARCH_MAX_HEIGHT = sy(348);
 
+// Expanded search composer metrics. One set of constants feeds BOTH the
+// styles and the height math, and everything is derived from the text's real
+// rendered line box (which follows the user's system font size via
+// fontScale) rather than the screen height alone. When the two drift apart —
+// the old paddings were sy()-scaled while the text wasn't — the input's frame
+// ends up shorter than its content and Android scrolls the first line up
+// under the composer's top border to keep the cursor visible, cropping the
+// text on shorter/narrower phones and larger font settings.
+const FONT_SCALE = PixelRatio.getFontScale();
+const COMPOSER_FONT_SIZE = sx(16);
+const COMPOSER_LINE_HEIGHT = sx(30); // style value; RN multiplies by fontScale
+const COMPOSER_LINE_BOX = Math.ceil(COMPOSER_LINE_HEIGHT * FONT_SCALE);
+const COMPOSER_BORDER = 2;
+// Top padding grows with the line box so ascenders always clear the border.
+const COMPOSER_PAD_TOP = Math.max(sy(10), Math.ceil(COMPOSER_LINE_BOX * 0.3));
+// Bottom padding must clear the 40dp attach/send button row.
+const COMPOSER_PAD_BOTTOM = Math.max(sy(50), sx(40) + sy(10));
+const COMPOSER_VPAD = COMPOSER_PAD_TOP + COMPOSER_PAD_BOTTOM + COMPOSER_BORDER * 2;
+// A single line must always fit, whatever the device's font scale.
+const COMPOSER_MIN_HEIGHT = Math.max(SEARCH_MIN_HEIGHT, COMPOSER_LINE_BOX + COMPOSER_VPAD);
+const COMPOSER_MAX_HEIGHT = Math.max(SEARCH_MAX_HEIGHT, COMPOSER_MIN_HEIGHT);
+
 const LOGO = onboardingSource(
   require('../../assets/onboarding/logo.png') as ImageSourcePropType,
   'logo',
@@ -66,7 +89,7 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
   const [showActions, setShowActions] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
-  const [composerHeight, setComposerHeight] = useState(SEARCH_MIN_HEIGHT);
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   // When set, the full-screen search results view is shown for this query.
   const [resultQuery, setResultQuery] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
@@ -86,7 +109,7 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
     if (!q) return;
     setShowVoice(false);
     setComposerExpanded(false);
-    setComposerHeight(SEARCH_MIN_HEIGHT);
+    setComposerHeight(COMPOSER_MIN_HEIGHT);
     setQuery('');
     Keyboard.dismiss();
     setResultQuery(q);
@@ -173,13 +196,19 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
   const handleComposerContentSize = (contentHeight: number) => {
     if (!composerExpanded) return;
-    const nextHeight = Math.max(SEARCH_MIN_HEIGHT, Math.min(SEARCH_MAX_HEIGHT, contentHeight + sy(54)));
+    // The frame is content + the exact chrome around it (paddings + borders).
+    // Anything less and the native input scrolls the first line under the top
+    // border to keep the cursor visible.
+    const nextHeight = Math.max(
+      COMPOSER_MIN_HEIGHT,
+      Math.min(COMPOSER_MAX_HEIGHT, Math.ceil(contentHeight) + COMPOSER_VPAD),
+    );
     setComposerHeight(nextHeight);
   };
 
   const openSearchOverlay = () => {
     setComposerExpanded(true);
-    setComposerHeight(SEARCH_MIN_HEIGHT);
+    setComposerHeight(COMPOSER_MIN_HEIGHT);
     inputRef.current?.blur();
     requestAnimationFrame(() => overlayInputRef.current?.focus());
   };
@@ -187,7 +216,7 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
   const closeSearchOverlay = () => {
     setQuery('');
     setComposerExpanded(false);
-    setComposerHeight(SEARCH_MIN_HEIGHT);
+    setComposerHeight(COMPOSER_MIN_HEIGHT);
     overlayInputRef.current?.blur();
     Keyboard.dismiss();
   };
@@ -568,23 +597,27 @@ const styles = StyleSheet.create({
   },
   overlayComposer: {
     borderRadius: sx(18),
-    borderWidth: 2,
+    borderWidth: COMPOSER_BORDER,
     borderColor: '#4f78ff',
     backgroundColor: '#ffffff',
     paddingHorizontal: sx(12),
-    paddingTop: sy(10),
-    paddingBottom: sy(50),
+    // Shared with the height math above — see COMPOSER_* constants. The top
+    // padding tracks the rendered line box so text clears the border on every
+    // phone and font-size setting.
+    paddingTop: COMPOSER_PAD_TOP,
+    paddingBottom: COMPOSER_PAD_BOTTOM,
   },
   overlayComposerInput: {
     flex: 1,
     fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(16),
-    lineHeight: sx(30),
+    fontSize: COMPOSER_FONT_SIZE,
+    lineHeight: COMPOSER_LINE_HEIGHT,
     color: '#1d192b',
     letterSpacing: -0.18,
     textAlign: 'left',
-    padding: 1,
-    includeFontPadding: false,
+    // No inner padding of its own (the wrapper owns it), and Android's font
+    // padding stays ON so tall ascenders/emoji keep their ascent headroom.
+    padding: 0,
   },
   overlayComposerLeftBtn: {
     position: 'absolute',

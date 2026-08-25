@@ -27,6 +27,7 @@ import {
 } from '../components/events/EventFilterSheet';
 import { useLanguage } from '../context/LanguageContext';
 import { ApiEvent, getEvent, getEvents, getEventsGrouped, track, updateEventEngagement } from '../api/events';
+import { openTaxiBooking } from '../utils/taxiBooking';
 
 // Events tab in the Vibes feed layout (Figma 11478:76666): section heading
 // with filter icon, 12px-gapped Buzz/Eventcards. Data comes from the live
@@ -37,8 +38,6 @@ import { ApiEvent, getEvent, getEvents, getEventsGrouped, track, updateEventEnga
 // server's selected_time_range bucket; category + popularity apply client-side.
 
 const PAGE_SIZE = 20;
-const KAKAO_T_SCHEME = 'kakaotaxi://';
-const KAKAO_T_FALLBACK = 'https://kakaot.onelink.me/';
 
 type Mode = { kind: 'feed' } | { kind: 'detail'; id: number };
 type Section = { key: string; title: string; data: ApiEvent[] };
@@ -261,19 +260,18 @@ export function EventsScreen({ onFullScreen }: Props) {
     }
   };
 
-  const bookTaxi = async (ev: ApiEvent) => {
+  // Same flow as the website's event modal: track the click (source_type
+  // event → server-defaulted channel kakao_p1), then open the event-attributed
+  // Kakao booking link. Tracking never gates the navigation.
+  const bookTaxi = (ev: ApiEvent) => {
     track.cabBookingClick(ev.id);
-    try {
-      const canOpen = await Linking.canOpenURL(KAKAO_T_SCHEME);
-      await Linking.openURL(canOpen ? KAKAO_T_SCHEME : KAKAO_T_FALLBACK);
-    } catch {
-      Linking.openURL(KAKAO_T_FALLBACK).catch(() => {});
-    }
+    openTaxiBooking('event');
   };
 
   const openSource = (ev: ApiEvent) => {
     if (!ev.sourceUrl) return;
-    track.sourceClick(ev.id);
+    // Contract row 5: open_event_link, the URL rides in metadata.event_link.
+    track.openEventLink(ev.id, ev.sourceUrl);
     Linking.openURL(ev.sourceUrl).catch(() => {});
   };
 

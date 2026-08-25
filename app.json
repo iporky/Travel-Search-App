@@ -3,15 +3,14 @@
     "name": "Konnect",
     "slug": "konnect-app",
     "scheme": "konnect-app",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#eaf4ff"
     },
     "ios": {
       "supportsTablet": true,

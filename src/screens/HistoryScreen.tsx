@@ -25,29 +25,30 @@ import { DropdownFilter } from '../components/history/FilterChips';
 import { HistoryRow, emojiForQuery } from '../components/history/HistoryRow';
 import { HistoryEmptyState } from '../components/history/HistoryEmptyState';
 import { HistorySearchScreen } from './history/HistorySearchScreen';
-import { SearchResultsScreen } from './SearchResultsScreen';
 import { ScreenTransition } from '../components/ScreenTransition';
 import { useLanguage } from '../context/LanguageContext';
 import { applyRecentlyViewed, useHistorySections, useSearchHistory } from '../hooks/useSearchHistory';
 import { loadViewed, markViewed, ViewedMap } from '../utils/historyViewed';
+import { track } from '../api/tracking';
 
-// Figma "History for Aug release" (section 12232:59925) — Kiki AI history:
+// Figma "History for Aug release" (section 12354:55424 revision) — Kiki AI history:
 //   • Header: "History" (Heading 35/ExtraBold) + search icon.
 //   • Two filter chips — sort (default Newest) and date (default All time) —
 //     each opening an action sheet; the chip shows the selected value and the
 //     list refreshes on pick.
-//   • Rows grouped by month ("August"), each a `Suggestion Chip/L`.
+//   • Rows grouped by month ("August"), each a `Suggestion Chip/L` ACCORDION
+//     (History_Expanded 12354:55779): tapping does NOT navigate — it expands
+//     in place and shows the answer/category/sources the History API stored.
 //   • Empty: bird + "Nothing here?" (no history at all) vs alert icon +
 //     "No matching results" (filters return 0).
-// Data: GET /api/v1/history/search (token-scoped, Confluence contract 46268418)
-// — the questions this user asked Kiki. Tapping a row re-opens it in search.
+// Data: GET /api/v1/history/search (token-scoped, Confluence contract 46268418).
 
 type Props = {
-  /** Reports when a full-screen sub-view (search / results) is open so the app hides the tab bar. */
+  /** Reports when a full-screen sub-view (search) is open so the app hides the tab bar. */
   onFullScreen?: (full: boolean) => void;
 };
 
-type Mode = { kind: 'list' } | { kind: 'search' } | { kind: 'results'; query: string; from: 'list' | 'search' };
+type Mode = { kind: 'list' } | { kind: 'search' };
 
 export function HistoryScreen({ onFullScreen }: Props) {
   const { t } = useTranslation();
@@ -55,6 +56,9 @@ export function HistoryScreen({ onFullScreen }: Props) {
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [viewed, setViewed] = useState<ViewedMap>({});
+  // Which rows are expanded (accordion; several can be open at once, as in
+  // the History_Expanded frame).
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const viewedRef = useRef(viewed);
   viewedRef.current = viewed;
 
@@ -67,7 +71,7 @@ export function HistoryScreen({ onFullScreen }: Props) {
   useEffect(() => {
     if (mode.kind === 'list') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setMode((m) => (m.kind === 'results' && m.from === 'search' ? { kind: 'search' } : { kind: 'list' }));
+      setMode({ kind: 'list' });
       return true;
     });
     return () => sub.remove();
@@ -77,36 +81,40 @@ export function HistoryScreen({ onFullScreen }: Props) {
   const ordered = filters.sort === 'recentlyViewed' ? applyRecentlyViewed(history.items, viewed) : history.items;
   const sections = useHistorySections(ordered, 'month', language.voiceLocale);
 
-  const openItem = useCallback(
-    (item: SearchHistoryItem, from: 'list' | 'search') => {
-      markViewed(item.id, viewedRef.current).then(setViewed);
-      setMode({ kind: 'results', query: item.user_query, from });
+  // Expanding counts as "viewing" the row: it feeds the Recently Viewed sort
+  // AND logs the contract's view_search event (source_id = the history row id).
+  const noteViewed = useCallback((item: SearchHistoryItem) => {
+    track.viewSearch(item.id);
+    markViewed(item.id, viewedRef.current).then(setViewed);
+  }, []);
+
+  const toggleItem = useCallback(
+    (item: SearchHistoryItem) => {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(item.id)) {
+          next.delete(item.id);
+        } else {
+          next.add(item.id);
+          noteViewed(item);
+        }
+        return next;
+      });
     },
-    [],
+    [noteViewed],
   );
 
   const sortOptions = HISTORY_SORTS.map((v) => ({ value: v, label: t(`history.sort.${v}`) }));
   const timeOptions = HISTORY_TIME_RANGES.map((v) => ({ value: v, label: t(`history.time.${v}`) }));
 
   // ── Sub-views ──────────────────────────────────────────────────────────────
-  if (mode.kind === 'results') {
-    return (
-      <ScreenTransition transitionKey={`history-results-${mode.query}`} mode="push">
-        <SearchResultsScreen
-          query={mode.query}
-          onBack={() => setMode(mode.from === 'search' ? { kind: 'search' } : { kind: 'list' })}
-          onAsk={(q) => setMode({ kind: 'results', query: q, from: mode.from })}
-        />
-      </ScreenTransition>
-    );
-  }
   if (mode.kind === 'search') {
     return (
       <ScreenTransition transitionKey="historySearch" mode="push">
         <HistorySearchScreen
           viewed={viewed}
           onBack={() => setMode({ kind: 'list' })}
-          onOpen={(item) => openItem(item, 'search')}
+          onViewed={noteViewed}
         />
       </ScreenTransition>
     );
@@ -169,9 +177,10 @@ export function HistoryScreen({ onFullScreen }: Props) {
           )}
           renderItem={({ item }) => (
             <HistoryRow
-              label={item.user_query}
-              emoji={emojiForQuery(item.user_query)}
-              onPress={() => openItem(item, 'list')}
+              item={item}
+              emoji={emojiForQuery(item.user_query, item.category)}
+              expanded={expandedIds.has(item.id)}
+              onToggle={() => toggleItem(item)}
             />
           )}
           refreshControl={

@@ -1,9 +1,10 @@
 /**
- * All backend traffic goes to the single test environment.
- * (Search streaming used to hit dev.konnect.kr and mocked APIs pointed at
- * api.konnect.app — consolidated here so nothing leaks to another host.)
+ * All backend traffic goes to the single dev environment.
+ * (Consolidated behind one host so nothing leaks to another environment —
+ * search streaming, auth/profile/onboarding/events, tracking and the
+ * About/Privacy WebView pages all derive from API_HOST.)
  */
-export const API_HOST = 'https://test.konnect.kr';
+export const API_HOST = 'https://dev.konnect.kr';
 
 export const API_BASE_URL = API_HOST;
 /** Live streaming search backend (POST /query/stream). */

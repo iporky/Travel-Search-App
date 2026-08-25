@@ -31,6 +31,7 @@ import {
 } from '../../api/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { track } from '../../api/tracking';
 import { colors } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { QuestionScreen } from './QuestionScreen';
@@ -65,11 +66,15 @@ interface Props {
 }
 
 export function OnboardingFlow({ onComplete }: Props) {
-  const { user, saveProfile, fetchProfile } = useAuth();
+  const { user, saveProfile, fetchProfile, personalizationStartsFromQuestions } = useAuth();
   const { language } = useLanguage();
   // Flow: 'intro' (Let's personalize + Get started) → 'profile' (name + avatar)
-  // → 'questions' → 'welcome'.
-  const [phase, setPhase] = useState<'intro' | 'profile' | 'questions' | 'welcome'>('intro');
+  // → 'questions' → 'welcome'. Re-entry from the Profile page's Preferences
+  // pencil (restartPersonalizationFromQuestions) skips straight to the
+  // questions — the saved record preloads the previous selections below.
+  const [phase, setPhase] = useState<'intro' | 'profile' | 'questions' | 'welcome'>(
+    personalizationStartsFromQuestions ? 'questions' : 'intro',
+  );
   // If the backend already has a profile (username set) for this user, skip the
   // name/photo screen and go straight to the questions.
   const [skipProfile, setSkipProfile] = useState(false);
@@ -229,6 +234,11 @@ export function OnboardingFlow({ onComplete }: Props) {
         onConfirm={async (username, photoUri) => {
           try {
             await saveProfile({ name: username, photoUri: photoUri ?? undefined });
+            // Tracking contract rows 9a / 12 — only what the user changed here.
+            if (username.trim() && username.trim() !== initialUsername) {
+              track.profileEdit('edit_profile_onboarding', 'onboarding_username');
+            }
+            if (photoUri) track.profileEdit('edit_profile_photo', 'profile_photo');
           } catch (e) {
             console.warn('[Onboarding] save profile failed', e);
           }

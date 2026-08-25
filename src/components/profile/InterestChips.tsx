@@ -2,10 +2,11 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../theme/tokens';
 
-// Figma Interests section (12276:94368 / "Popular categories list"):
-// Onboarding/Selection/Chip — unselected: 1px dashed #abbed2, radius 12, p8,
-// 14/Medium content-tertiary; selected: #527dff fill, 14/Medium #f2f9ff; the
-// "+ Add more" chip uses the unselected style. Rows gap 4, list gap 8.
+// Figma Interests section (12322:53992 / "Popular categories list", Aug
+// revision): chips live inside a white card; unselected: 1px SOLID #abbed2,
+// radius 12, p8, 14/Medium; selected: #527dff fill, 14/Medium #f2f9ff. Only
+// "+ Add more" keeps the dashed border. Rows gap 4, list gap 8. Chips are
+// inert until the section's edit pencil is active (same as the website).
 
 /** The web app's predefined interests (stored verbatim in personalization.interests). */
 export const PREDEFINED_INTERESTS = [
@@ -75,7 +76,7 @@ export function InterestChip({
   label: string;
   selected?: boolean;
   onPress?: () => void;
-  /** Force the dashed (unselected) look — used by "+ Add more". */
+  /** Dashed border — only "+ Add more" uses it in the Aug design. */
   dashed?: boolean;
 }) {
   const filled = selected && !dashed;
@@ -84,7 +85,8 @@ export function InterestChip({
       style={({ pressed }) => [
         styles.chip,
         filled ? styles.chipSelected : styles.chipOutline,
-        pressed && (filled ? styles.chipSelectedPressed : styles.chipOutlinePressed),
+        dashed && styles.chipDashed,
+        pressed && !!onPress && (filled ? styles.chipSelectedPressed : styles.chipOutlinePressed),
       ]}
       onPress={onPress}
       disabled={!onPress}
@@ -100,6 +102,7 @@ export function InterestChipList({
   onToggle,
   onAddMore,
   addMoreLabel,
+  editable = true,
 }: {
   /** Every chip to show (presets + custom), in order. */
   interests: string[];
@@ -107,6 +110,8 @@ export function InterestChipList({
   onToggle: (name: string) => void;
   onAddMore: () => void;
   addMoreLabel: string;
+  /** When false (pencil not active) the chips render but don't respond. */
+  editable?: boolean;
 }) {
   return (
     <View style={styles.wrap}>
@@ -115,10 +120,10 @@ export function InterestChipList({
           key={name}
           label={`${interestEmoji(name)} ${name}`}
           selected={selected.includes(name)}
-          onPress={() => onToggle(name)}
+          onPress={editable ? () => onToggle(name) : undefined}
         />
       ))}
-      <InterestChip label={addMoreLabel} dashed onPress={onAddMore} />
+      <InterestChip label={addMoreLabel} dashed onPress={editable ? onAddMore : undefined} />
     </View>
   );
 }
@@ -134,9 +139,10 @@ const styles = StyleSheet.create({
   },
   chipOutline: {
     borderWidth: 1,
-    borderStyle: 'dashed',
+    borderStyle: 'solid',
     borderColor: colors.gray[600],
   },
+  chipDashed: { borderStyle: 'dashed' },
   chipOutlinePressed: { backgroundColor: colors.surface.soft },
   chipSelected: { backgroundColor: colors.blue[500] },
   chipSelectedPressed: { backgroundColor: colors.blue[600] },

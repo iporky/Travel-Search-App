@@ -28,25 +28,41 @@ import { useLanguage } from '../../context/LanguageContext';
 import { applyRecentlyViewed, useHistorySections, useSearchHistory } from '../../hooks/useSearchHistory';
 import { ViewedMap } from '../../utils/historyViewed';
 
-// Figma SearchResult_WithQuery (12232:59976 / 12232:59999): back arrow +
+// Figma History_SearchResult (12354:55449 / 12354:55525): back arrow +
 // search field (Onboarding/Input/Field), "245 results for "E7 Visa"" line,
 // the same two filter chips, then results grouped by DAY ("August 1") as
-// `Suggestion Chip/L` rows. Zero matches → alert icon + "No matching results".
+// `Suggestion Chip/L` accordion rows — tapping expands the stored answer in
+// place (no navigation). Zero matches → alert icon + "No matching results".
 // The keyword is matched server-side (GET /history/search?q=).
 
 type Props = {
   /** Local "recently viewed" ledger (for that sort option). */
   viewed: ViewedMap;
   onBack: () => void;
-  onOpen: (item: SearchHistoryItem) => void;
+  /** Called when a row is expanded (feeds the Recently Viewed ledger). */
+  onViewed: (item: SearchHistoryItem) => void;
 };
 
-export function HistorySearchScreen({ viewed, onBack, onOpen }: Props) {
+export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleItem = (item: SearchHistoryItem) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+        onViewed(item);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(query.trim()), 300);
@@ -133,7 +149,12 @@ export function HistorySearchScreen({ viewed, onBack, onOpen }: Props) {
             </Text>
           )}
           renderItem={({ item }) => (
-            <HistoryRow label={item.user_query} emoji={emojiForQuery(item.user_query)} onPress={() => onOpen(item)} />
+            <HistoryRow
+              item={item}
+              emoji={emojiForQuery(item.user_query, item.category)}
+              expanded={expandedIds.has(item.id)}
+              onToggle={() => toggleItem(item)}
+            />
           )}
           onEndReached={history.loadMore}
           onEndReachedThreshold={0.6}

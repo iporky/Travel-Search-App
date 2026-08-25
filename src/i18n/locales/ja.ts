@@ -490,6 +490,11 @@ const ja = {
     permissionDenied: 'マイクの許可が拒否されました',
   },
   search: {
+    searchingFor: '検索中',
+    cantAnswerTitle: 'この質問には回答できません',
+    tryDifferent: '別の質問をお試しください。下にいくつかの提案があります。',
+    reference: '参考資料',
+    koreanLaw: '韓国の法律',
     title: '回答',
     thinking: '考え中...',
     sources: '参照元',

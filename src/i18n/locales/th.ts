@@ -490,6 +490,11 @@ const th = {
     permissionDenied: 'การอนุญาตไมโครโฟนถูกปฏิเสธ',
   },
   search: {
+    searchingFor: 'กำลังค้นหา',
+    cantAnswerTitle: 'ไม่สามารถตอบคำถามนี้ได้',
+    tryDifferent: 'ลองถามคำถามอื่น — มีข้อเสนอแนะอยู่ด้านล่าง',
+    reference: 'อ้างอิง',
+    koreanLaw: 'กฎหมายเกาหลี',
     title: 'คำตอบ',
     thinking: 'กำลังคิด...',
     sources: 'แหล่งที่มา',

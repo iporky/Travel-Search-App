@@ -490,6 +490,11 @@ const zh = {
     permissionDenied: '麦克风权限被拒绝',
   },
   search: {
+    searchingFor: '正在搜索',
+    cantAnswerTitle: '无法回答该问题',
+    tryDifferent: '请尝试其他问题——下方列出了一些建议。',
+    reference: '参考资料',
+    koreanLaw: '韩国法律',
     title: '答案',
     thinking: '思考中...',
     sources: '来源',

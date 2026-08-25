@@ -490,6 +490,11 @@ const de = {
     permissionDenied: 'Mikrofonberechtigung verweigert',
   },
   search: {
+    searchingFor: 'Suche nach',
+    cantAnswerTitle: 'Diese Anfrage können wir nicht beantworten',
+    tryDifferent: 'Versuche eine andere Frage — unten findest du einige Vorschläge.',
+    reference: 'Referenz',
+    koreanLaw: 'Koreanisches Recht',
     title: 'Antwort',
     thinking: 'Denkt nach...',
     sources: 'Quellen',

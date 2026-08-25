@@ -9,12 +9,17 @@
  *   (deliberately — the old GET /search/history had an IDOR gap).
  *
  * Response is the shared PaginatedResponse envelope:
- *   { total, page, limit, count, total_pages, has_next, has_previous,
- *     filters, items: [{ id, query_text, platform, created_at }] }
+ *   { total, page, limit, count, total_pages, has_next, has_previous, filters,
+ *     items: [{ id, question, answer, category, sources, followup_questions,
+ *               platform, created_at }] }
+ * (`question` was renamed from `query_text`; answer/category/sources/
+ * followup_questions are new — the items are now the stored
+ * search_query_responses rows, not tracking_events rows.)
  *
- * `sort_by` is whitelisted to created_at | query_text; order asc|desc;
- * limit 1–100. "Recently viewed" has no server field — it's a local ledger
- * (utils/historyViewed) applied on top of newest-first.
+ * `sort_by` is whitelisted to created_at | query_text (the latter kept as the
+ * accepted value for API stability — it maps to `question` internally);
+ * order asc|desc; limit 1–100. "Recently viewed" has no server field — it's a
+ * local ledger (utils/historyViewed) applied on top of newest-first.
  */
 import auth from '@react-native-firebase/auth';
 import { AUTH_API_URL } from '../config';
@@ -65,7 +70,14 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 interface RawItem {
   id: string;
-  query_text: string;
+  /** Contract field (renamed from `query_text`; "" if missing, never null). */
+  question?: string;
+  /** Pre-rename field name — tolerated so a stale backend still renders. */
+  query_text?: string;
+  answer?: string | null;
+  category?: string | null;
+  sources?: { index?: number; tag?: string; url?: string; title?: string; type?: string }[] | null;
+  followup_questions?: string[] | null;
   platform: string | null;
   created_at: string;
 }
@@ -97,11 +109,16 @@ export async function getSearchHistory(q: HistoryQuery): Promise<HistoryPage> {
   }
   const body = await res.json();
   const items: SearchHistoryItem[] = ((body.items ?? []) as RawItem[])
-    .filter((it) => typeof it?.query_text === 'string' && it.query_text.trim())
+    .map((it) => ({ ...it, _q: (it?.question ?? it?.query_text ?? '').trim() }))
+    .filter((it) => it._q)
     .map((it) => ({
       id: it.id,
-      user_query: it.query_text.trim(),
+      user_query: it._q,
       started_at: it.created_at ?? '',
+      category: it.category ?? null,
+      answer: it.answer ?? null,
+      sources: Array.isArray(it.sources) ? it.sources : null,
+      followup_questions: Array.isArray(it.followup_questions) ? it.followup_questions : null,
     }));
   return {
     total: Number(body.total ?? items.length),
