@@ -79,6 +79,8 @@ export function HistoryScreen({ onFullScreen }: Props) {
 
   const history = useSearchHistory({ filters });
   const ordered = filters.sort === 'recentlyViewed' ? applyRecentlyViewed(history.items, viewed) : history.items;
+  // Month-wise sections ("Aug") regardless of the range filter — the per-day
+  // "MMM D" grouping for short ranges is parked for now (product call).
   const sections = useHistorySections(ordered, 'month', language.voiceLocale);
 
   // Expanding counts as "viewing" the row: it feeds the Recently Viewed sort

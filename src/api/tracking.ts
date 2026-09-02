@@ -124,6 +124,14 @@ export const track = {
   // Rows 7–12: one row per edited field; channel names the field.
   profileEdit: (eventType: ProfileEditEventType, channel: TrackingChannel) =>
     trackEvent({ event_type: eventType, source_type: 'profile', channel }),
+  // Home cashback banner tap — monitoring only, channel always null (web
+  // Home.js handleBannerClick parity).
+  receiptBannerClick: () =>
+    trackEvent({ event_type: 'receipt_banner_click', source_type: 'receipt_banner_click' }),
+  // Logged after a receipt upload SUCCEEDS, never on the click (web parity —
+  // a failed upload is not a receipt uploaded).
+  receiptUpload: () =>
+    trackEvent({ event_type: 'receipt_upload', source_type: 'receipt_upload' }),
   feedbackSubmitted: (kind: string) =>
     trackEvent({ event_type: 'feedback_submitted', source_type: 'feedback', metadata: { kind } }),
 };

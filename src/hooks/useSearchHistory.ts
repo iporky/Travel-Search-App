@@ -108,10 +108,11 @@ function parseIso(s: string): Date | null {
 }
 
 /**
- * Group rows into dated sections. Main list → by month ("August"),
- * search results → by day ("August 1"); the year is appended when it's not
- * the current one. Sections follow first-appearance order so a
- * recently-viewed ordering doesn't scatter rows across duplicate headers.
+ * Group rows into dated sections. Ranges wider than 30 days → by month
+ * ("Aug"), 30 days or less (and search results) → by day ("Aug 3"); the year
+ * is appended when it's not the current one. Sections follow first-appearance
+ * order so a recently-viewed ordering doesn't scatter rows across duplicate
+ * headers.
  */
 export function useHistorySections(
   items: SearchHistoryItem[],
@@ -137,14 +138,14 @@ export function useHistorySections(
       if (granularity === 'month') {
         key = `${d.getFullYear()}-${d.getMonth()}`;
         title = fmt(
-          sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' },
+          sameYear ? { month: 'short' } : { month: 'short', year: 'numeric' },
           d,
           `${d.getMonth() + 1}/${d.getFullYear()}`,
         );
       } else {
         key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
         title = fmt(
-          sameYear ? { month: 'long', day: 'numeric' } : { month: 'long', day: 'numeric', year: 'numeric' },
+          sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
           d,
           `${d.getMonth() + 1}/${d.getDate()}`,
         );

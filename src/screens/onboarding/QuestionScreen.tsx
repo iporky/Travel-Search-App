@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import { colors, radius } from '../../theme/tokens';
 import { OnboardingQuestion } from '../../api/onboarding';
 import { onboardingSource } from '../../assets/onboardingAssets';
@@ -108,9 +109,21 @@ export function QuestionScreen({
         </View>
       </View>
 
-      {/* Question bubble — mascot bird on the left */}
+      {/* Question bubble — walking-bird Lottie on the left (Onboarding_Purpose
+          12320:52339 "loading bird", 79×62; frames carry their own bg). */}
       <View style={styles.bubbleRow}>
-        <Image source={AVATAR_SOURCE} style={styles.birdAvatar} resizeMode="contain" />
+        {/* Loading bird under the plane progress bar. Its frames carry a flat
+            #eaf4fd background — the same colour the screen is painted — so it
+            fills the slot edge to edge with no seam and needs no feather. */}
+        <View style={styles.birdLottieBox}>
+          <LottieView
+            source={require('../../../assets/lottie/question-bird.json')}
+            style={styles.birdLottie}
+            autoPlay
+            loop
+            resizeMode="cover"
+          />
+        </View>
         <View style={styles.bubble}>
           <Text style={styles.bubbleText}>{question.prompt}</Text>
         </View>
@@ -428,6 +441,11 @@ const styles = StyleSheet.create({
     paddingBottom: sy(12),
   },
   birdAvatar: { width: sx(56), height: sx(56) },
+  // Loading-bird Lottie slot (79×62 design px, 12469:86055). The source is
+  // 720×554 — the same 1.27:1 the slot is — so "cover" fills it with no crop
+  // worth speaking of.
+  birdLottieBox: { width: sx(79), height: sx(62) },
+  birdLottie: { width: '100%', height: '100%' },
   bubble: {
     // Hug the text: shrink to content, wrap only when it would exceed the row.
     flexShrink: 1,

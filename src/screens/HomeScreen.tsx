@@ -19,9 +19,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml } from 'react-native-svg';
-import { PlusIcon, PaperAirplaneIcon } from 'react-native-heroicons/solid';
+import { PaperAirplaneIcon } from 'react-native-heroicons/solid';
 import { useTranslation } from 'react-i18next';
-import { ActionSheet } from '../components/ActionSheet';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { SearchResultsScreen } from './SearchResultsScreen';
 import { useAuth } from '../context/AuthContext';
@@ -29,7 +28,9 @@ import { useLanguage } from '../context/LanguageContext';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { onboardingSource } from '../assets/onboardingAssets';
-import { HOME_BIRD_SVG } from '../assets/homeBird';
+import { CASHBACK_BANNER_SOURCE } from '../assets/cashback';
+import { CashbackFlowScreen } from './cashback/CashbackFlowScreen';
+import { track } from '../api/tracking';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -86,12 +87,13 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
   const keyboardHeight = useKeyboardHeight();
 
   const [query, setQuery] = useState('');
-  const [showActions, setShowActions] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   // When set, the full-screen search results view is shown for this query.
   const [resultQuery, setResultQuery] = useState<string | null>(null);
+  // Taxi-cashback banner flow (Figma "Banner popup") over the Home screen.
+  const [cashbackOpen, setCashbackOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const overlayInputRef = useRef<TextInput>(null);
 
@@ -132,10 +134,10 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
   const TRENDING_SEARCHES = useMemo(
     () => [
-      { emoji: '🍖', label: t('home.trending.bbq') },
-      { emoji: '🎫', label: t('home.trending.waterbombTickets') },
-      { emoji: '🏝️', label: t('home.trending.jeju') },
-      { emoji: '🏄', label: t('home.trending.lineup') },
+      { emoji: '🎤', label: t('home.trending.kpop') },
+      { emoji: '🍜', label: t('home.trending.food') },
+      { emoji: '💄', label: t('home.trending.beauty') },
+      { emoji: '🍁', label: t('home.trending.autumn') },
     ],
     [t],
   );
@@ -225,13 +227,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
   return (
     <View style={styles.flex}>
-      {/* Figma 03_Home_NewUser bg: #eaf4ff → #f2f9ff (surface-elevated →
-          surface-default) — differs from the app-wide surfaceDim gradient. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['#eaf4ff', '#f2f9ff']}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Flat #ecf4fe — exactly the handswave Lottie's baked frame background
+          (Home_Default 12320:52295), so the animation square is invisible. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatBg]} />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
@@ -252,20 +250,22 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
           <Text style={styles.questionText}>{t('home.whereNext')}</Text>
         </View>
 
-        {/* Soft white glow behind the mascot (Figma Ellipse 2099) — the design
-            blurs an ellipse; RN can't blur, so fade white in and out vertically. */}
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
-          locations={[0, 0.5, 1]}
-          style={styles.birdGlow}
-        />
+        {/* No glow/clouds — the Aug design keeps Home clean on the flat bg. */}
 
-        {/* Mascot (SVG) */}
-        <View style={styles.birdWrap}>
-          <Animated.View style={[styles.bird, { transform: [{ translateY: birdY }] }]}>
-            <SvgXml xml={HOME_BIRD_SVG} width="100%" height="100%" />
-          </Animated.View>
+        {/* Taxi-cashback promo banner (Banner_M, 12393:85048), vertically
+            centred in the space between the greeting and the search dock. The
+            tap is tracked in its own right (receipt_banner_click — monitoring
+            only, channel always null; web Home parity), then the flow opens. */}
+        <View style={styles.bannerWrap}>
+          <Pressable
+            style={({ pressed }) => [styles.cashbackBanner, pressed && styles.cashbackBannerPressed]}
+            onPress={() => {
+              track.receiptBannerClick();
+              setCashbackOpen(true);
+            }}
+          >
+            <Image source={CASHBACK_BANNER_SOURCE} style={styles.cashbackBannerImage} resizeMode="cover" />
+          </Pressable>
         </View>
 
       </ScrollView>
@@ -284,13 +284,10 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
             end={{ x: 0.5, y: 1 }}
             style={[styles.searchPill, { height: SEARCH_MIN_HEIGHT }]}
           >
-            <Pressable
-              onPress={() => setShowActions(true)}
-              style={styles.pillIconBtn}
-              hitSlop={8}
-            >
-              <PlusIcon size={sx(24)} color="#fff" />
-            </Pressable>
+            {/* Balances the mic/send button on the right so the centered
+                placeholder stays on the pill's true centre. (The attachment
+                "+" that used to sit here is removed until that ships.) */}
+            <View style={styles.pillIconBtn} />
 
             <TextInput
               ref={inputRef}
@@ -340,7 +337,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
             <Text style={styles.overlayHeading}>{t('home.trendingSearches')}</Text>
             <View style={styles.overlayTrendingList}>
               {TRENDING_SEARCHES.map((item) => (
-                <Pressable key={item.label} style={styles.overlayChip} onPress={() => setQuery(item.label)}>
+                // Tapping a trending keyword searches it straight away
+                // (Home_TrendingSearch) — it is never staged in the composer.
+                <Pressable key={item.label} style={styles.overlayChip} onPress={() => runSearch(item.label)}>
                   <Text style={styles.overlayChipEmoji}>{item.emoji}</Text>
                   <Text style={styles.overlayChipLabel}>{item.label}</Text>
                 </Pressable>
@@ -361,10 +360,6 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
                   returnKeyType="default"
                 />
 
-                <Pressable onPress={() => setShowActions(true)} style={styles.overlayComposerLeftBtn} hitSlop={8}>
-                  <PlusIcon size={sx(24)} color="#527dff" />
-                </Pressable>
-
                 <Pressable onPress={handleSubmit} style={styles.overlayComposerRightBtn} hitSlop={8}>
                   <Ionicons name="arrow-up" size={sx(18)} color="#fff" />
                 </Pressable>
@@ -374,12 +369,6 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
         </View>
       ) : null}
 
-      <ActionSheet
-        visible={showActions}
-        onClose={() => setShowActions(false)}
-        onCamera={() => {}}
-        onFile={() => {}}
-      />
       <VoiceOverlay
         visible={showVoice}
         onClose={closeVoice}
@@ -394,13 +383,15 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
           onAsk={(q) => runSearch(q)}
         />
       ) : null}
+
+      {cashbackOpen ? <CashbackFlowScreen onClose={() => setCashbackOpen(false)} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: sy(120) },
+  content: { flexGrow: 1, paddingBottom: sy(120) },
 
   header: {
     flexDirection: 'row',
@@ -450,12 +441,21 @@ const styles = StyleSheet.create({
   },
 
   // Figma: bird top ≈335 of 812 — pushed down into the free middle area.
-  birdWrap: {
-    alignItems: 'center',
-    paddingVertical: sy(4),
-    marginTop: sy(90),
+  // Flat screen background = the handswave Lottie's own frame color.
+  flatBg: { backgroundColor: '#ecf4fe' },
+  // Cashback banner card (Banner_M: 349×126 within 13px side margins, r≈11.4;
+  // design places it right below the greeting block, y≈344).
+  // Fills the leftover height so the banner floats centred, not top-stuck.
+  bannerWrap: { flex: 1, justifyContent: 'center' },
+  cashbackBanner: {
+    alignSelf: 'center',
+    width: W - sx(26),
+    aspectRatio: 350 / 127,
+    borderRadius: sx(11.4),
+    overflow: 'hidden',
   },
-  bird: { width: sx(202), height: sy(149) },
+  cashbackBannerPressed: { opacity: 0.9 },
+  cashbackBannerImage: { width: '100%', height: '100%' },
   // Figma Ellipse 2099 (375×131 @ y≈478): soft white halo behind the mascot.
   birdGlow: {
     position: 'absolute',
@@ -618,15 +618,6 @@ const styles = StyleSheet.create({
     // No inner padding of its own (the wrapper owns it), and Android's font
     // padding stays ON so tall ascenders/emoji keep their ascent headroom.
     padding: 0,
-  },
-  overlayComposerLeftBtn: {
-    position: 'absolute',
-    left: sx(10),
-    bottom: sy(6),
-    width: sx(40),
-    height: sx(40),
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   overlayComposerRightBtn: {
     position: 'absolute',

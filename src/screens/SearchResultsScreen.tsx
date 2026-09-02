@@ -11,9 +11,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import { useTranslation } from 'react-i18next';
 import {
   ConfidenceIndicator,
@@ -111,6 +110,8 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [confidence, setConfidence] = useState<ConfidenceIndicator | null>(null);
   const [error, setError] = useState(false);
+  // Sources accordion — closed until the user opens it.
+  const [sourcesOpen, setSourcesOpen] = useState(false);
 
   // One session id per screen instance so follow-ups share a session.
   const sessionId = useRef(makeSessionId()).current;
@@ -130,6 +131,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
     setFollowups([]);
     setConfidence(null);
     setError(false);
+    setSourcesOpen(false);
 
     const handle = streamQuery(
       {
@@ -223,7 +225,9 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   // Rotate through the streamed search queries while waiting — loops rather
   // than resting on the last one, until the answer itself appears (web parity).
   useEffect(() => {
-    if (searchQueries.length < 2 || summary || validationError) return;
+    // Keeps cycling for as long as the strip is up (i.e. the whole stream), so
+    // the ticker never freezes next to a spinning loader.
+    if (searchQueries.length < 2 || !streaming || validationError) return;
     const id = setTimeout(() => {
       Animated.timing(tickerOpacity, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
         setTickerIdx((i) => (i + 1) % searchQueries.length);
@@ -231,7 +235,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
       });
     }, 1600);
     return () => clearTimeout(id);
-  }, [searchQueries, tickerIdx, summary, validationError, tickerOpacity]);
+  }, [searchQueries, tickerIdx, streaming, validationError, tickerOpacity]);
 
   const openUrl = (url: string) => {
     Linking.openURL(url).catch(() => {});
@@ -252,12 +256,21 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const currentQuery = searchQueries.length
     ? searchQueries[tickerIdx % searchQueries.length]
     : null;
-  const showEarlyStrip = streaming && !summary && !validationError && (category || currentQuery);
+  // The strip leads the results: the category chip stays put once known (it
+  // belongs to the answer, not just the loading state), while the loader row
+  // inside is stream-scoped — up from the moment the request is fired
+  // (`streaming` starts true) until the backend reports the answer complete.
+  const showEarlyStrip = (streaming || !!category) && !validationError;
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['#eaf4ff', '#f2f9ff']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Flat #ecf4fe — the one background used across the signed-in shell so
+          the page, and the tab-bar strip below it, read as one surface. */}
+      <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
+      {/* No SafeAreaView here: this screen overlays the tab content area,
+          which already sits below the app shell's top inset — adding another
+          'top' edge double-counted the status bar and left a large gap. */}
+      <View style={styles.safe}>
         {/* Top bar */}
         <View style={styles.topBar}>
           <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
@@ -279,8 +292,10 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
             <Text style={styles.queryText}>{query}</Text>
           </View>
 
-          {/* Early preview (web StreamingSearchTemplate): category chip +
-              "Searching for <query>" ticker — the only in-flight indicator. */}
+          {/* In-flight indicator. The loader appears the instant the stream
+              opens — it never waits for a category or a search term — and only
+              leaves when the backend says the answer is complete. The category
+              chip and the query ticker fill in around it as they arrive. */}
           {showEarlyStrip ? (
             <View style={styles.earlyStrip}>
               {category ? (
@@ -288,23 +303,44 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
                   <Text style={styles.categoryChipText}>{category}</Text>
                 </View>
               ) : null}
-              {currentQuery ? (
+              {streaming ? (
                 <View style={styles.searchingRow}>
-                  <Text style={styles.searchingLabel}>{t('search.searchingFor')}</Text>
-                  <Animated.View style={[styles.queryChip, { opacity: tickerOpacity }]}>
-                    <Ionicons name="search" size={sx(12)} color="#3289C9" />
-                    <Text style={styles.queryChipText} numberOfLines={1}>
-                      {currentQuery}
-                    </Text>
-                  </Animated.View>
+                  {/* Loading Lottie (SearchResult 12354:57687, 42×42). Vector
+                      source with a transparent background — "contain" fits it
+                      whole, no crop and nothing to blend against. */}
+                  <View style={styles.searchingLottieBox}>
+                    <LottieView
+                      source={require('../../assets/lottie/search-loading.json')}
+                      style={styles.searchingLottie}
+                      autoPlay
+                      loop
+                      resizeMode="contain"
+                    />
+                  </View>
+                  {/* "Searching for" only reads once there's a search term to
+                      show next to it — until the stream populates the queries,
+                      the loader animates alone. */}
+                  {currentQuery ? (
+                    <>
+                      <Text style={styles.searchingLabel}>{t('search.searchingFor')}</Text>
+                      <Animated.View style={[styles.queryChip, { opacity: tickerOpacity }]}>
+                        <Ionicons name="search" size={sx(12)} color="#3289C9" />
+                        <Text style={styles.queryChipText} numberOfLines={1}>
+                          {currentQuery}
+                        </Text>
+                      </Animated.View>
+                    </>
+                  ) : null}
                 </View>
               ) : null}
             </View>
           ) : null}
 
-          {/* Enforced service CTA (web ServiceCTA): pinned taxi card, visible
-              from the first frame and above the answer once it streams in. */}
+          {/* Enforced service CTA (web ServiceCTA): pinned taxi card, shown
+              once the category has loaded — the strip leads, then the taxi,
+              then the answer as it streams in. */}
           {!validationError &&
+            !!category &&
             recommendations.map((rec) => (
               <View key={rec.service_key} style={styles.ctaCard}>
                 <View style={styles.ctaEmojiWell}>
@@ -380,46 +416,14 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
               <View style={styles.answerHeader}>
                 <Image source={BIRD} style={styles.answerAvatar} resizeMode="contain" />
                 <Text style={styles.answerBrand}>Konnect</Text>
-                {confidence ? (
-                  <View style={styles.confidencePill}>
-                    <Text style={styles.confidenceText}>
-                      {confidence.badge} {confidence.level}
-                    </Text>
-                  </View>
-                ) : null}
+                {/* Confidence badge (grounded/partial dots) intentionally not
+                    shown — product call; the state is still tracked. */}
               </View>
               <FormattedSummary text={summary} />
             </View>
           ) : null}
 
-          {/* Sources */}
-          {sources.length > 0 ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('search.sources')}</Text>
-              {sources.map((s) => {
-                // Hermes lacks a full URL implementation — extract host via regex.
-                const host = s.url.match(/^https?:\/\/([^/]+)/)?.[1]?.replace(/^www\./, '') ?? s.url;
-                return (
-                  <Pressable key={s.index} style={styles.sourceCard} onPress={() => openUrl(s.url)}>
-                    <View style={styles.sourceTag}>
-                      <Text style={styles.sourceTagText}>{s.index}</Text>
-                    </View>
-                    <View style={styles.flex}>
-                      <Text style={styles.sourceTitle} numberOfLines={1}>
-                        {s.title || host}
-                      </Text>
-                      <Text style={styles.sourceSnippet} numberOfLines={1}>
-                        {s.url}
-                      </Text>
-                    </View>
-                    <Ionicons name="open-outline" size={sx(16)} color="#93a5b9" />
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {/* Follow-up questions */}
+          {/* Follow-up questions — before the sources (product order). */}
           {followups.length > 0 ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{t('search.related')}</Text>
@@ -431,8 +435,47 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
               ))}
             </View>
           ) : null}
+
+          {/* Sources — collapsed by default; the list only unfolds on tap. */}
+          {sources.length > 0 ? (
+            <View style={styles.section}>
+              <Pressable
+                style={styles.sourcesToggle}
+                onPress={() => setSourcesOpen((o) => !o)}
+                hitSlop={6}
+              >
+                <Text style={styles.sectionTitle}>{t('search.sources')}</Text>
+                <Ionicons
+                  name={sourcesOpen ? 'chevron-up' : 'chevron-down'}
+                  size={sx(18)}
+                  color="#93a5b9"
+                />
+              </Pressable>
+              {sourcesOpen &&
+                sources.map((s) => {
+                  // Hermes lacks a full URL implementation — extract host via regex.
+                  const host = s.url.match(/^https?:\/\/([^/]+)/)?.[1]?.replace(/^www\./, '') ?? s.url;
+                  return (
+                    <Pressable key={s.index} style={styles.sourceCard} onPress={() => openUrl(s.url)}>
+                      <View style={styles.sourceTag}>
+                        <Text style={styles.sourceTagText}>{s.index}</Text>
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.sourceTitle} numberOfLines={1}>
+                          {s.title || host}
+                        </Text>
+                        <Text style={styles.sourceSnippet} numberOfLines={1}>
+                          {s.url}
+                        </Text>
+                      </View>
+                      <Ionicons name="open-outline" size={sx(16)} color="#93a5b9" />
+                    </Pressable>
+                  );
+                })}
+            </View>
+          ) : null}
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -440,9 +483,15 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, zIndex: 50, elevation: 50 },
+  flatBg: { backgroundColor: '#ecf4fe' },
   safe: { flex: 1 },
   flex: { flex: 1 },
 
+  sourcesToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   topBar: {
     height: sy(48),
     paddingHorizontal: sx(12),
@@ -488,6 +537,8 @@ const styles = StyleSheet.create({
 
   // Early preview (web): category chip + "Searching for" ticker.
   earlyStrip: { marginBottom: sy(12), gap: sy(8) },
+  searchingLottieBox: { width: sx(42), height: sx(42) },
+  searchingLottie: { width: '100%', height: '100%' },
   categoryChip: {
     alignSelf: 'flex-start',
     height: sy(22),

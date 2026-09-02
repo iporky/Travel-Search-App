@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SvgXml } from 'react-native-svg';
+import LottieView from 'lottie-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FLOW_A_QUESTIONS,
@@ -38,6 +38,7 @@ import { QuestionScreen } from './QuestionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
 import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
 import { FORCE_ONBOARDING } from '../../config';
+import { LottieEdgeFeather } from '../../components/LottieEdgeFeather';
 import { ScreenTransition } from '../../components/ScreenTransition';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -298,12 +299,10 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#eaf4ff', '#f2f9ff']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-      />
+      {/* Flat #eaf4fd — exactly the loading-bird Lottie's baked frame colour
+          (the airplane-loader question pages), so its slot is invisible. The
+          welcome bird's frames sit within 2/255 of this, so it blends too. */}
+      <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
         {/* Every phase/step change slides in (forward) or back (pop) rather than
             snapping — same motion language as the rest of the app. */}
@@ -346,7 +345,21 @@ function SetupIntro({ onStart }: { onStart: () => void }) {
       <Animated.View
         style={[introStyles.center, { opacity, transform: [{ translateY: rise }, { scale }] }]}
       >
-        <Image source={BIRD} style={introStyles.bird} resizeMode="contain" />
+        {/* Welcome-bird Lottie (Onboarding_Username_Intro 12320:52326,
+            250×191). Full frame — no zoom-crop, so the bird and its halo are
+            never cut off; the edge feather alone dissolves the frames' baked
+            corner vignette into the screen background. */}
+        <View style={introStyles.birdLottieBox}>
+          <LottieView
+            source={require('../../../assets/lottie/welcome-bird.json')}
+            style={introStyles.birdLottieInner}
+            autoPlay
+            loop
+            resizeMode="cover"
+          />
+          {/* Thin top band — the bird's head sits near the frame top. */}
+          <LottieEdgeFeather color="#eaf4fd" top={0.08} bottom={0.2} side={0.16} />
+        </View>
         <Text style={introStyles.title}>{t('onboarding.setupTitle')}</Text>
       </Animated.View>
 
@@ -375,6 +388,14 @@ const introStyles = StyleSheet.create({
     letterSpacing: -0.16,
   },
   bird: { width: sx(150), height: sy(118), marginBottom: sy(6) },
+  birdLottieBox: {
+    width: sx(250),
+    height: sx(191),
+    borderRadius: sx(24),
+    overflow: 'hidden',
+    marginBottom: sy(6),
+  },
+  birdLottieInner: { width: '100%', height: '100%' },
   title: {
     fontFamily: 'NationalPark_700Bold',
     fontSize: sx(28),
@@ -745,9 +766,11 @@ const ctr = StyleSheet.create({
 });
 
 // ─── Welcome / completion screen ─────────────────────────────────────────────
+// Onboarding_Complete (12320:52281): the "Welcome fly" Lottie (250×250, JPEG
+// frames on their own #ecf4fe bg) above the message, on a flat #ecf4fe screen
+// so the animation square blends seamlessly.
 function Welcome({ name, onContinue }: { name: string; onContinue: () => void }) {
   const { t } = useTranslation();
-  const float = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -757,24 +780,20 @@ function Welcome({ name, onContinue }: { name: string; onContinue: () => void })
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    ).start();
   }, []);
-
-  const birdY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
 
   return (
     <View style={styles.welcomeRoot}>
       <View style={styles.welcomeCenter}>
-        <Animated.Image
-          source={BIRD}
-          style={[styles.welcomeBird, { opacity: fade, transform: [{ translateY: birdY }] }]}
-          resizeMode="contain"
-        />
+        <View style={styles.welcomeLottieBox}>
+          <LottieView
+            source={require('../../../assets/lottie/welcome-fly.json')}
+            style={styles.welcomeLottie}
+            autoPlay
+            loop
+            resizeMode="cover"
+          />
+        </View>
         <Animated.View style={{ opacity: fade, alignItems: 'center' }}>
           <Text style={styles.welcomeTitle}>{t('onboarding.welcomeTitle', { name })}</Text>
           <Text style={styles.welcomeSubtitle}>{t('onboarding.welcomeSubtitle')}</Text>
@@ -790,13 +809,23 @@ function Welcome({ name, onContinue }: { name: string; onContinue: () => void })
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // Bird-Lottie frame background (see render comment).
+  flatBg: { backgroundColor: '#eaf4fd' },
   safe: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Welcome
-  welcomeRoot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: sy(16) },
-  welcomeCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: sy(36) },
+  // Welcome — flat #ecf4fe per Onboarding_Complete so the Lottie square blends.
+  welcomeRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: sy(16),
+    backgroundColor: '#ecf4fe',
+  },
+  welcomeCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: sy(24) },
   welcomeBird: { width: sx(180), height: sx(180) },
+  welcomeLottieBox: { width: sx(250), height: sx(250), borderRadius: sx(24), overflow: 'hidden' },
+  welcomeLottie: { width: '100%', height: '100%' },
   welcomeTitle: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(24),

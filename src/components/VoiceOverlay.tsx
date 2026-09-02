@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageSourcePropType, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SvgXml } from 'react-native-svg';
-import { XMarkIcon } from 'react-native-heroicons/solid';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { onboardingSource } from '../assets/onboardingAssets';
@@ -11,6 +11,9 @@ const VOICE_BIRD = onboardingSource(
   require('../../assets/voice/bird.png') as ImageSourcePropType,
   'voice_processing_bird',
 );
+// Home_TypeVoice close (12320:52323): bare X, stroke weight 2.5,
+// Semantic/Content/muted (#93a5b9) — no filled circle behind it.
+const CLOSE_X_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6L18 18M18 6L6 18" stroke="#93a5b9" stroke-width="2.5" stroke-linecap="round"/></svg>`;
 const MIC_SELECTED_SVG = `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19.8346 8.16952V12.8362C19.8346 16.0578 17.2229 18.6695 14.0013 18.6695C10.7796 18.6695 8.16797 16.0578 8.16797 12.8362V8.16952C8.16797 4.94786 10.7796 2.33618 14.0013 2.33618C17.2229 2.33618 19.8346 4.94786 19.8346 8.16952Z" fill="#527DFF" stroke="#527DFF" stroke-width="1.75" stroke-linecap="round"/><path d="M23.3346 12.8362C23.3346 17.9909 19.156 22.1695 14.0013 22.1695M14.0013 22.1695C8.84664 22.1695 4.66797 17.9909 4.66797 12.8362M14.0013 22.1695V25.6695M14.0013 25.6695H17.5013M14.0013 25.6695H10.5013" stroke="#527DFF" stroke-width="2" stroke-linecap="round"/></svg>`;
 
 type Props = {
@@ -46,19 +49,9 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <LinearGradient
-        colors={['#E3F1FF', '#2F52EC', '#5446FB']}
-        locations={[0, 0.85, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={['rgba(0,0,0,0)', 'rgba(17, 26, 96, 0.24)']}
-        start={{ x: 0, y: 0.45 }}
-        end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Flat #fdfdfd — exactly the headphone-bird Lottie's baked frame
+          background (the idle bird lives on this audio screen only). */}
+      <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
       <View style={styles.container}>
         <View style={styles.headerWrap}>
           <Text style={[typography.heading35Semibold, styles.title]}>
@@ -67,17 +60,28 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
         </View>
 
         <View style={styles.middle}>
-          <Image source={VOICE_BIRD} style={styles.bird} resizeMode="contain" />
-          {transcript ? (
-            <Text style={styles.transcript} numberOfLines={4}>
-              {transcript}
-            </Text>
-          ) : null}
+          {/* Headphone-bird Lottie (Home_TypeVoice 12320:52311, 160×160). */}
+          <View style={styles.birdLottieBox}>
+            <LottieView
+              source={require('../../assets/lottie/home-idle.json')}
+              style={styles.birdLottie}
+              autoPlay
+              loop
+              resizeMode="cover"
+            />
+          </View>
+          {/* Live-caption slot: a fixed-height box that is ALWAYS laid out, so
+              the bird never shifts when text appears. The text is pinned to
+              the slot's bottom — it fills downward for ~3 lines, then the
+              oldest words clip away off the top as more speech streams in. */}
+          <View style={styles.transcriptSlot}>
+            {transcript ? <Text style={styles.transcript}>{transcript}</Text> : null}
+          </View>
         </View>
 
         <View style={styles.row}>
           <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={12}>
-            <XMarkIcon size={22} color={colors.text.onDark} />
+            <SvgXml xml={CLOSE_X_SVG} width={24} height={24} />
           </Pressable>
 
           <View style={styles.micWrap}>
@@ -124,9 +128,8 @@ const styles = StyleSheet.create({
     fontSize: 35,
     letterSpacing: -1.4,
     lineHeight: 44,
-    fontWeight: "600",
-    fontFamily: "National Park",
-    overflow: "hidden"
+    fontFamily: 'NationalPark_600SemiBold',
+    overflow: 'hidden',
   },
   middle: {
     flex: 1,
@@ -136,19 +139,30 @@ const styles = StyleSheet.create({
     zIndex: 6,
     elevation: 6,
   },
+  // Flat screen background = the headphone-bird Lottie's own frame color.
+  flatBg: { backgroundColor: '#fdfdfd' },
   bird: {
     width: 188,
     height: 188,
     zIndex: 7,
     elevation: 7,
   },
+  birdLottieBox: { width: 160, height: 160, zIndex: 7, elevation: 7 },
+  birdLottie: { width: '100%', height: '100%' },
+  // 3 caption lines tall, top-clipped so the newest words always show.
+  transcriptSlot: {
+    alignSelf: 'stretch',
+    height: 26 * 3,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
   transcript: {
-    color: colors.text.onDark,
+    color: colors.text.primary,
     opacity: 0.9,
+    fontFamily: 'NationalPark_500Medium',
     fontSize: 18,
     lineHeight: 26,
     textAlign: 'center',
-    marginTop: spacing[6],
     paddingHorizontal: spacing[4],
   },
   row: {
@@ -159,8 +173,6 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 48,
     height: 48,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },

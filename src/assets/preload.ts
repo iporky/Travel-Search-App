@@ -51,6 +51,11 @@ const APP_ASSETS: number[] = [
   // History empty-state bird (Figma "Nothing here?").
   require('../../assets/mascot/bird-empty.png'),
 
+  // Taxi-cashback flow (Home banner card + detail art + success dialog art).
+  require('../../assets/cashback/banner-m.png'),
+  require('../../assets/cashback/detail-taxi.png'),
+  require('../../assets/cashback/confirmation.png'),
+
   // NOTE: the nav/voice/auth icons are rendered as inline SVG strings
   // (TabBar, VoiceOverlay), so their .svg files don't need preloading.
 ];

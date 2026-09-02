@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -151,40 +152,26 @@ export function SignIn({ onPress, active }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
-      <LinearGradient
-        colors={['#c9e3ff', '#f2f9ff', '#ffffff']}
-        locations={[0, 0.71, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Soft radial glow + subtle clouds. */}
-      <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(300) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
-        <Defs>
-          <RadialGradient id="signinGlow" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.55} />
-            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#signinGlow)" />
-      </Svg>
-      <View pointerEvents="none" style={{ position: 'absolute', left: sx(231), top: sy(78), width: sx(144), height: sy(123) }}>
-        <SvgXml xml={SIGNIN_TOP_CLOUD_SVG} width={sx(144)} height={sy(123)} />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', left: sx(-4), top: sy(272), width: sx(242), height: sy(163) }}>
-        <SvgXml xml={SIGNIN_BOTTOM_CLOUD_SVG} width={sx(242)} height={sy(163)} />
-      </View>
+      {/* Flat #dbecf6 — exactly the login Lottie's baked frame background
+          (SignUp_SignIn 12320:52240); clouds/glow removed per the Aug design. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatBg]} />
 
       {/* Logo */}
       {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
-      {/* Bird + title/subtitle, anchored in the upper-middle of the screen. */}
+      {/* Bird + title/subtitle, anchored in the upper-middle of the screen.
+          The hero is the designer's login Lottie (301×223 design px, JPEG
+          frames on their own #dbecf6 background). */}
       <View style={styles.topContent} pointerEvents="none">
-        <Animated.View style={{ transform: [{ translateY: birdY }] }}>
-          <SvgXml xml={SIGNIN_BIRD_SVG} width={sx(278)} height={sy(207)} />
-        </Animated.View>
+        <View style={styles.heroLottieBox}>
+          <LottieView
+            source={require('../../../assets/lottie/signin-bird.json')}
+            style={styles.heroLottie}
+            autoPlay
+            loop
+            resizeMode="cover"
+          />
+        </View>
 
         <Animated.View style={[styles.textColumn, { opacity: fadeAnim }]}>
           <View style={styles.headerText}>
@@ -320,6 +307,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: sy(36),
   },
+  // Flat screen background = the login Lottie's own frame color.
+  flatBg: { backgroundColor: '#dbecf6' },
+  // Login hero Lottie (301×223 design px; bg matches the screen).
+  heroLottieBox: { width: sx(301), height: sx(223) },
+  heroLottie: { width: '100%', height: '100%' },
   textColumn: {
     width: sx(300),
     alignItems: 'center',

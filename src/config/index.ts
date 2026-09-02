@@ -19,7 +19,7 @@ export const USE_MOCKS = true;
  * questions) on every launch and sign-in, even for users who already have a
  * backend profile. Flip to false to restore the normal once-per-user behavior.
  */
-export const FORCE_ONBOARDING = true;
+export const FORCE_ONBOARDING = false;
 
 export const STORAGE_KEYS = {
   PERSONALIZATION_PREFIX: 'konnect_personalized_',
