@@ -467,7 +467,7 @@ const zhTW = {
   },
   home: {
     hi: '嗨，{{name}}！',
-    whereNext: '你的下一場\n冒險在哪裡？',
+    specialOffer: "專屬優惠",
     tryAsking: '試著問...',
     askPlaceholder: '問我任何問題',
     askPlaceholderExpanded: '問我任何問題！',
@@ -482,6 +482,14 @@ const zhTW = {
       food: '首爾美食指南',
       beauty: '韓國美妝購物',
       autumn: '秋季韓國之旅',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "搭乘\n計程車",
+      receipt: "上傳\n收據",
+      cashback: "獲得\n回饋金",
+      cta: "開始使用",
     },
   },
   voice: {

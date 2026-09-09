@@ -467,7 +467,7 @@ const vi = {
   },
   home: {
     hi: 'Chào, {{name}}!',
-    whereNext: 'Chuyến phiêu lưu tiếp theo\ncủa bạn ở đâu?',
+    specialOffer: "Ưu đãi đặc biệt dành cho bạn",
     tryAsking: 'Thử hỏi...',
     askPlaceholder: 'Hỏi tôi bất cứ điều gì',
     askPlaceholderExpanded: 'Hỏi tôi bất cứ điều gì!',
@@ -482,6 +482,14 @@ const vi = {
       food: 'Cẩm nang ẩm thực Seoul',
       beauty: 'Mua sắm mỹ phẩm Hàn Quốc',
       autumn: 'Du lịch Hàn Quốc mùa thu',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "Đi\ntaxi",
+      receipt: "Tải lên\nhóa đơn",
+      cashback: "Nhận\nhoàn tiền",
+      cta: "Bắt đầu",
     },
   },
   voice: {

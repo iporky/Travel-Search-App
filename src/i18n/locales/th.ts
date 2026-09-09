@@ -467,7 +467,7 @@ const th = {
   },
   home: {
     hi: 'สวัสดี, {{name}}!',
-    whereNext: 'การผจญภัยครั้งต่อไป\nของคุณอยู่ที่ไหน?',
+    specialOffer: "ข้อเสนอพิเศษสำหรับคุณ",
     tryAsking: 'ลองถาม...',
     askPlaceholder: 'ถามอะไรก็ได้',
     askPlaceholderExpanded: 'ถามอะไรก็ได้!',
@@ -482,6 +482,14 @@ const th = {
       food: 'ไกด์อาหารโซล',
       beauty: 'ช้อปปิ้งบิวตี้เกาหลี',
       autumn: 'เที่ยวเกาหลีฤดูใบไม้ร่วง',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "นั่ง\nแท็กซี่",
+      receipt: "อัปโหลด\nใบเสร็จ",
+      cashback: "รับ\nเงินคืน",
+      cta: "เริ่มต้น",
     },
   },
   voice: {

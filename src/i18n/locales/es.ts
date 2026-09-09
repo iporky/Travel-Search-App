@@ -467,7 +467,7 @@ const es = {
   },
   home: {
     hi: '¡Hola, {{name}}!',
-    whereNext: '¿Cuál es tu próxima\naventura?',
+    specialOffer: "Oferta especial para ti",
     tryAsking: 'Prueba a preguntar...',
     askPlaceholder: 'Pregúntame lo que sea',
     askPlaceholderExpanded: '¡Pregúntame lo que sea!',
@@ -482,6 +482,14 @@ const es = {
       food: 'Guía gastronómica de Seúl',
       beauty: 'Compras de belleza en Corea',
       autumn: 'Viajes a Corea en otoño',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "Toma\nun taxi",
+      receipt: "Sube el\nrecibo",
+      cashback: "Recibe\ncashback",
+      cta: "Empezar",
     },
   },
   voice: {

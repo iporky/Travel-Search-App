@@ -23,6 +23,20 @@ export const CASHBACK_BANNER_SOURCE = cashbackSource(
   'assets_cashback_bannerm',
 );
 
+/** Home receipt-steps banner artwork (Sep 1 round, Figma 12915:85188). */
+export const CASHBACK_STEP1_SOURCE = cashbackSource(
+  require('../../assets/cashback/steps/step1-taxi.png') as ImageSourcePropType,
+  'assets_cashback_steps_step1taxi',
+);
+export const CASHBACK_STEP2_SOURCE = cashbackSource(
+  require('../../assets/cashback/steps/step2-receipt.png') as ImageSourcePropType,
+  'assets_cashback_steps_step2receipt',
+);
+export const CASHBACK_STEP3_SOURCE = cashbackSource(
+  require('../../assets/cashback/steps/step3-cashback.png') as ImageSourcePropType,
+  'assets_cashback_steps_step3cashback',
+);
+
 /** Detail screen taxi illustration (Detail_Image). */
 export const CASHBACK_DETAIL_SOURCE = cashbackSource(
   require('../../assets/cashback/detail-taxi.png') as ImageSourcePropType,

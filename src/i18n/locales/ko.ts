@@ -467,7 +467,7 @@ const ko = {
   },
   home: {
     hi: '안녕하세요, {{name}}!',
-    whereNext: '다음 모험은\n어디인가요?',
+    specialOffer: "당신을 위한 특별 혜택",
     tryAsking: '이렇게 물어보세요...',
     askPlaceholder: '무엇이든 물어보세요',
     askPlaceholderExpanded: '무엇이든 물어보세요!',
@@ -482,6 +482,14 @@ const ko = {
       food: '서울 맛집 가이드',
       beauty: '한국 뷰티 쇼핑',
       autumn: '가을 한국 여행',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "택시\n타기",
+      receipt: "영수증\n업로드",
+      cashback: "캐시백\n받기",
+      cta: "시작하기",
     },
   },
   voice: {

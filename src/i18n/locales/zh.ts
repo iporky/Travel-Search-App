@@ -467,7 +467,7 @@ const zh = {
   },
   home: {
     hi: '你好，{{name}}！',
-    whereNext: '你的下一场\n冒险在哪里？',
+    specialOffer: "专属特惠",
     tryAsking: '试试问...',
     askPlaceholder: '问我任何问题',
     askPlaceholderExpanded: '问我任何问题！',
@@ -482,6 +482,14 @@ const zh = {
       food: '首尔美食指南',
       beauty: '韩国美妆购物',
       autumn: '秋季韩国之旅',
+    },
+    // Receipt-cashback banner steps (Figma 12915:85188). Each label
+    // breaks onto two lines, as the design does.
+    receiptSteps: {
+      taxi: "乘坐\n出租车",
+      receipt: "上传\n收据",
+      cashback: "获得\n返现",
+      cta: "开始使用",
     },
   },
   voice: {

@@ -10,7 +10,6 @@ import {
   PixelRatio,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,7 +27,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { onboardingSource } from '../assets/onboardingAssets';
-import { CASHBACK_BANNER_SOURCE } from '../assets/cashback';
+import { ReceiptStepsBanner } from '../components/ReceiptStepsBanner';
 import { CashbackFlowScreen } from './cashback/CashbackFlowScreen';
 import { track } from '../api/tracking';
 
@@ -94,6 +93,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
   const [resultQuery, setResultQuery] = useState<string | null>(null);
   // Taxi-cashback banner flow (Figma "Banner popup") over the Home screen.
   const [cashbackOpen, setCashbackOpen] = useState(false);
+  // Height left for the steps banner once the header, greeting and the
+  // reserved dock footprint are laid out; the banner scales itself into it.
+  const [bannerSpace, setBannerSpace] = useState(0);
   const inputRef = useRef<TextInput>(null);
   const overlayInputRef = useRef<TextInput>(null);
 
@@ -227,12 +229,10 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
   return (
     <View style={styles.flex}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      {/* Home is a fixed, non-scrolling screen: everything has to fit the
+          viewport, so the banner below scales itself into whatever height is
+          left rather than the page growing past the search dock. */}
+      <View style={styles.content}>
         {/* Header: logo + beta pill */}
         <View style={styles.header}>
           <Image source={LOGO} style={styles.logo} resizeMode="contain" />
@@ -244,28 +244,32 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
         {/* Greeting */}
         <View style={styles.greetingBlock}>
           <Text style={styles.hiText}>{t('home.hi', { name: firstName })}</Text>
-          <Text style={styles.questionText}>{t('home.whereNext')}</Text>
+          <Text style={styles.questionText} numberOfLines={1}>
+            {t('home.specialOffer')}
+          </Text>
         </View>
 
         {/* No glow/clouds — the Aug design keeps Home clean on the flat bg. */}
 
-        {/* Taxi-cashback promo banner (Banner_M, 12393:85048), vertically
-            centred in the space between the greeting and the search dock. The
-            tap is tracked in its own right (receipt_banner_click — monitoring
-            only, channel always null; web Home parity), then the flow opens. */}
-        <View style={styles.bannerWrap}>
-          <Pressable
-            style={({ pressed }) => [styles.cashbackBanner, pressed && styles.cashbackBannerPressed]}
+        {/* Receipt-cashback banner (Sep 1 round, 12915:85188) — three numbered
+            steps over a "Get started" link, vertically centred in the space
+            between the greeting and the search dock. The tap is tracked in its
+            own right (receipt_banner_click — monitoring only, channel always
+            null; web Home parity), then the flow opens. */}
+        <View
+          style={styles.bannerWrap}
+          onLayout={(e) => setBannerSpace(e.nativeEvent.layout.height)}
+        >
+          <ReceiptStepsBanner
+            availableHeight={bannerSpace}
             onPress={() => {
               track.receiptBannerClick();
               setCashbackOpen(true);
             }}
-          >
-            <Image source={CASHBACK_BANNER_SOURCE} style={styles.cashbackBannerImage} resizeMode="cover" />
-          </Pressable>
+          />
         </View>
 
-      </ScrollView>
+      </View>
 
       {/* New-user home is intentionally clean (greeting → bird → search pill);
           quick suggestions live in the search overlay's "Trending" list. */}
@@ -388,7 +392,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { flexGrow: 1, paddingBottom: sy(120) },
+  // Reserves the search dock's footprint (dock bottom 16 + pill ≈ 56, plus
+  // breathing room) so the banner is centred in space that is actually visible.
+  content: { flex: 1, paddingBottom: sy(96) },
 
   header: {
     flexDirection: 'row',
@@ -428,30 +434,21 @@ const styles = StyleSheet.create({
     color: '#657586',
     letterSpacing: -0.16,
   },
+  // Heading/24/Semibold on a single line, 8 under the greeting (12915:85182).
   questionText: {
     fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(35),
-    lineHeight: sx(44),
+    fontSize: sx(24),
+    lineHeight: sx(30),
     color: '#1d192b',
-    letterSpacing: -1.4,
-    marginTop: sy(12),
+    letterSpacing: -0.24,
+    marginTop: sy(8),
   },
 
   // Figma: bird top ≈335 of 812 — pushed down into the free middle area.
   // Flat screen background = the handswave Lottie's own frame color.
-  // Cashback banner card (Banner_M: 349×126 within 13px side margins, r≈11.4;
-  // design places it right below the greeting block, y≈344).
-  // Fills the leftover height so the banner floats centred, not top-stuck.
+  // Centred in the space left between the greeting and the reserved dock
+  // footprint, which lands the 372-tall steps banner at the design's y≈216.
   bannerWrap: { flex: 1, justifyContent: 'center' },
-  cashbackBanner: {
-    alignSelf: 'center',
-    width: W - sx(26),
-    aspectRatio: 350 / 127,
-    borderRadius: sx(11.4),
-    overflow: 'hidden',
-  },
-  cashbackBannerPressed: { opacity: 0.9 },
-  cashbackBannerImage: { width: '100%', height: '100%' },
   // Figma Ellipse 2099 (375×131 @ y≈478): soft white halo behind the mascot.
   birdGlow: {
     position: 'absolute',
