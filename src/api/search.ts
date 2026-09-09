@@ -24,6 +24,7 @@
 import { Platform } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import { SEARCH_API_URL } from '../config';
+import { recordSearchResponse } from './tracking';
 
 // ── Event payload types (the subset the UI renders) ─────────────────────────
 export interface StreamEvent {
@@ -73,6 +74,11 @@ export interface StreamHandlers {
   onDone: () => void;
   /** Called on network failure or non-2xx status. */
   onError: (error: Error) => void;
+  /**
+   * Optional. Called with the shareable response_id once the finished search
+   * has been persisted. Fires after onDone and never blocks or gates it.
+   */
+  onRecorded?: (responseId: string) => void;
 }
 
 // The API expects an English language name.
@@ -149,6 +155,9 @@ export function streamQuery(
   let pending = '';
   let consumed = 0;
   let finished = false;
+  // Every event exactly as it arrived. Handed to the recorder untouched — it
+  // extracts the stored search response (and dedupes) from these.
+  const rawEvents: StreamEvent[] = [];
 
   const pump = () => {
     const text = xhr.responseText ?? '';
@@ -161,7 +170,10 @@ export function streamQuery(
     for (const raw of objects) {
       try {
         const event = JSON.parse(raw) as StreamEvent;
-        if (event && typeof event.type === 'string') handlers.onEvent(event);
+        if (event && typeof event.type === 'string') {
+          rawEvents.push(event);
+          handlers.onEvent(event);
+        }
       } catch {
         // Skip malformed fragments rather than killing the stream.
       }
@@ -171,8 +183,22 @@ export function streamQuery(
   const finish = (err?: Error) => {
     if (finished) return;
     finished = true;
-    if (err) handlers.onError(err);
-    else handlers.onDone();
+    if (err) {
+      handlers.onError(err);
+      return;
+    }
+    handlers.onDone();
+
+    // The answer is already on screen; persisting it is a background side
+    // effect that yields the id "share" needs. Best-effort by design — failing
+    // here only means this answer can't be shared, never that the search failed.
+    if (handlers.onRecorded && rawEvents.length) {
+      recordSearchResponse({ sessionId: body.session_id, request: body, response: rawEvents })
+        .then((responseId) => {
+          if (responseId) handlers.onRecorded?.(responseId);
+        })
+        .catch((e) => console.warn('[api] search not recorded:', (e as Error)?.message ?? e));
+    }
   };
 
   const body = {

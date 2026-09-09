@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   Easing,
+  GestureResponderEvent,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -13,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
+import { AutoFitTitle } from '../../components/AutoFitTitle';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { SCREEN2_BIRD_SVG } from '../../assets/screen2BirdSvg';
 
@@ -31,7 +33,7 @@ const ICON_EMERGENCY = onboardingSource(require('../../../assets/onboarding/sign
 
 interface Props {
   activeIndex: number;
-  onPress: () => void;
+  onPress: (e: GestureResponderEvent) => void;
   active?: boolean;
 }
 
@@ -119,14 +121,6 @@ export function SplashWelcome2({ onPress, active }: Props) {
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      {/* Base gradient — expo-linear-gradient with absoluteFill always covers the
-          whole screen on any size (phone, foldable, tablet). */}
-      <LinearGradient
-        colors={['#cfe6ff', '#e4f0ff', '#f3f6fe']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
 
       {/* Soft radial glow behind the hero bird (small positioned SVG). */}
       <Svg
@@ -189,10 +183,11 @@ export function SplashWelcome2({ onPress, active }: Props) {
 
       <Animated.View style={[styles.contentContainer, { bottom: sy(129), opacity: fadeAnim, paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
-          <View style={styles.titleRow}>
+          {/* Long translations shrink uniformly to fit one line. */}
+          <AutoFitTitle maxWidth={W - sx(40)}>
             <Text style={styles.titleBold}>{t('splash.two.titleBold')} </Text>
             <Text style={styles.titleMed}>{t('splash.two.titleMed')}</Text>
-          </View>
+          </AutoFitTitle>
           <Text style={styles.subtitle}>{t('splash.two.subtitle')}</Text>
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
@@ -202,7 +197,7 @@ export function SplashWelcome2({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#eef4ff' },
+  root: { width: '100%', height: '100%', overflow: 'hidden' },
   bubble: { backgroundColor: 'rgba(255,255,255,0.6)', alignItems: 'center', justifyContent: 'center' },
   contentContainer: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   textBlock: { alignItems: 'center', gap: sy(20) },

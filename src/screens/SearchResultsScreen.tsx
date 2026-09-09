@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
   ImageSourcePropType,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { shareContent } from '../utils/share';
 import LottieView from 'lottie-react-native';
 import { useTranslation } from 'react-i18next';
 import {
@@ -112,6 +115,10 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   const [error, setError] = useState(false);
   // Sources accordion — closed until the user opens it.
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  // Set once the finished search has been persisted; until then there is no id
+  // to mint a share link from, so the share control stays hidden.
+  const [responseId, setResponseId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   // One session id per screen instance so follow-ups share a session.
   const sessionId = useRef(makeSessionId()).current;
@@ -209,6 +216,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
         onDone: () => {
           setStreaming(false);
         },
+        onRecorded: (id) => setResponseId(id),
         onError: (e) => {
           setStreaming(false);
           // Show translated copy; the raw exception goes to the log, not the UI.
@@ -262,6 +270,23 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
   // (`streaming` starts true) until the backend reports the answer complete.
   const showEarlyStrip = (streaming || !!category) && !validationError;
 
+  // Same flow as the website: the finished search was persisted for us (that is
+  // where responseId comes from), so ask the backend for a short link and hand
+  // it to the OS share sheet.
+  const onShare = async () => {
+    if (!responseId || sharing) return;
+    setSharing(true);
+    try {
+      const res = await shareContent({ kind: 'search', id: responseId, title: query });
+      // A failed mint is usually "you don't own this search" rather than "it
+      // doesn't exist", so the contract asks for a generic message. Dismissing
+      // the sheet is not a failure worth interrupting for.
+      if (res.failure === 'mint') Alert.alert(t('search.error'));
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       {/* Flat #ecf4fe — the one background used across the signed-in shell so
@@ -279,6 +304,7 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
           <Text style={styles.topTitle} numberOfLines={1}>
             {t('search.title')}
           </Text>
+          {/* Balances the back button so the title stays centred. */}
           <View style={{ width: sx(36) }} />
         </View>
 
@@ -420,6 +446,24 @@ export function SearchResultsScreen({ query, onBack, onAsk }: Props) {
                     shown — product call; the state is still tracked. */}
               </View>
               <FormattedSummary text={summary} />
+              {/* Share the answer — inside the answer card, at its end, on the
+                  same left margin as the text. Only once the search has been
+                  persisted, since that id is what the short link is minted
+                  from. */}
+              {responseId ? (
+                <Pressable
+                  onPress={onShare}
+                  disabled={sharing}
+                  hitSlop={10}
+                  style={styles.answerShare}
+                >
+                  <Ionicons
+                    name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
+                    size={sx(18)}
+                    color={sharing ? '#c3cede' : '#93a5b9'}
+                  />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 
@@ -700,6 +744,11 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+  },
+  answerShare: {
+    alignSelf: 'flex-start',
+    marginTop: sy(14),
+    paddingVertical: sy(2),
   },
   answerHeader: {
     flexDirection: 'row',

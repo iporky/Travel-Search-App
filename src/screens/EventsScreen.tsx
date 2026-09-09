@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   BackHandler,
   Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -19,6 +20,7 @@ import { colors, radius, spacing } from '../theme/tokens';
 import { LoadingImage } from '../components/LoadingImage';
 import { ScreenTransition } from '../components/ScreenTransition';
 import { ApiEventCard } from '../components/events/ApiEventCard';
+import { shareContent } from '../utils/share';
 import {
   EMPTY_EVENT_FILTERS,
   EventFilters,
@@ -56,6 +58,7 @@ export function EventsScreen({ onFullScreen }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'feed' });
   const [detailLoading, setDetailLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const inFlight = useRef(false);
   const [filters, setFilters] = useState<EventFilters>(EMPTY_EVENT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -260,6 +263,19 @@ export function EventsScreen({ onFullScreen }: Props) {
     }
   };
 
+  // Same flow as the website: ask the backend for a short share_url for this
+  // event, then hand it to the OS share sheet. Guarded so a double-tap can't
+  // mint twice; a failure still opens the sheet with the long link.
+  const shareThisEvent = async (ev: ApiEvent) => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await shareContent({ kind: 'event', id: ev.id, title: ev.text });
+    } finally {
+      setSharing(false);
+    }
+  };
+
   // Same flow as the website's event modal: track the click (source_type
   // event → server-defaulted channel kakao_p1), then open the event-attributed
   // Kakao booking link. Tracking never gates the navigation.
@@ -289,6 +305,8 @@ export function EventsScreen({ onFullScreen }: Props) {
             onToggleSave={() => toggle(ev, 'save_status')}
             onBookTaxi={() => bookTaxi(ev)}
             onOpenSource={() => openSource(ev)}
+            onShare={() => shareThisEvent(ev)}
+            sharing={sharing}
           />
         </ScreenTransition>
       );
@@ -487,6 +505,8 @@ function EventDetail({
   onToggleSave,
   onBookTaxi,
   onOpenSource,
+  onShare,
+  sharing,
 }: {
   event: ApiEvent;
   loading: boolean;
@@ -495,6 +515,8 @@ function EventDetail({
   onToggleSave: () => void;
   onBookTaxi: () => void;
   onOpenSource: () => void;
+  onShare: () => void;
+  sharing: boolean;
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -504,13 +526,28 @@ function EventDetail({
         <Pressable style={styles.backBtn} hitSlop={8} onPress={onBack}>
           <Ionicons name="chevron-back" size={24} color={colors.gray[1300]} />
         </Pressable>
-        <Pressable hitSlop={8} onPress={onToggleSave}>
-          <Ionicons
-            name={event.save_status ? 'bookmark' : 'bookmark-outline'}
-            size={24}
-            color={event.save_status ? colors.blue[500] : colors.icon.primary}
-          />
-        </Pressable>
+        <View style={styles.detailTopActions}>
+          {/* Mints a short link, then opens the OS share sheet. The glyph
+              follows each platform's own share affordance. */}
+          <Pressable hitSlop={8} onPress={onShare} disabled={sharing}>
+            {sharing ? (
+              <ActivityIndicator size="small" color={colors.icon.primary} />
+            ) : (
+              <Ionicons
+                name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
+                size={24}
+                color={colors.icon.primary}
+              />
+            )}
+          </Pressable>
+          <Pressable hitSlop={8} onPress={onToggleSave}>
+            <Ionicons
+              name={event.save_status ? 'bookmark' : 'bookmark-outline'}
+              size={24}
+              color={event.save_status ? colors.blue[500] : colors.icon.primary}
+            />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.detailContent}>
@@ -649,6 +686,7 @@ const styles = StyleSheet.create({
   // Detail
   detailTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[3], paddingVertical: spacing[2] },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  detailTopActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
   detailContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[10], gap: spacing[3] },
   hero: { width: '100%', height: 220, borderRadius: radius.xl, backgroundColor: colors.gray[400] },
   hostRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },

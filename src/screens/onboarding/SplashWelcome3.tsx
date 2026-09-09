@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   Easing,
+  GestureResponderEvent,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -13,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
+import { AutoFitTitle } from '../../components/AutoFitTitle';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import {
   BUZZ_BIRD_TOP_SVG,
@@ -33,7 +35,7 @@ const sy = (n: number) => (n * H) / DESIGN_H;
 
 interface Props {
   activeIndex?: number;
-  onPress: () => void;
+  onPress: (e: GestureResponderEvent) => void;
   active?: boolean;
 }
 
@@ -78,13 +80,6 @@ export function SplashWelcome3({ onPress, active }: Props) {
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
-      <LinearGradient
-        colors={['#cfe6ff', '#e4f0ff', '#f3f6fe']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
 
       {/* Soft radial glow. */}
       <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(360) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
@@ -168,10 +163,11 @@ export function SplashWelcome3({ onPress, active }: Props) {
       {/* Bottom text */}
       <View style={[styles.bottomContent, { bottom: sy(129), paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
-          <View style={styles.titleRow}>
+          {/* Long translations shrink uniformly to fit one line. */}
+          <AutoFitTitle maxWidth={W - sx(40)}>
             <Text style={styles.titleBold}>{t('splash.three.titleBold')} </Text>
             <Text style={styles.titleMed}>{t('splash.three.titleMed')}</Text>
-          </View>
+          </AutoFitTitle>
           <Text style={styles.subtitle}>{t('splash.three.subtitle')}</Text>
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
@@ -181,7 +177,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#f3f6fe' },
+  root: { width: '100%', height: '100%', overflow: 'hidden' },
   bubbleOuter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   bubble: {
     maxWidth: sx(245),

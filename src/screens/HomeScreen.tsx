@@ -227,9 +227,6 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed }: HomeScreenP
 
   return (
     <View style={styles.flex}>
-      {/* Flat #ecf4fe — exactly the handswave Lottie's baked frame background
-          (Home_Default 12320:52295), so the animation square is invisible. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatBg]} />
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
@@ -442,7 +439,6 @@ const styles = StyleSheet.create({
 
   // Figma: bird top ≈335 of 812 — pushed down into the free middle area.
   // Flat screen background = the handswave Lottie's own frame color.
-  flatBg: { backgroundColor: '#ecf4fe' },
   // Cashback banner card (Banner_M: 349×126 within 13px side margins, r≈11.4;
   // design places it right below the greeting block, y≈344).
   // Fills the leftover height so the banner floats centred, not top-stuck.

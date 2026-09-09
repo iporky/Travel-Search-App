@@ -1,6 +1,8 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -28,6 +30,7 @@ import {
   getOnboarding,
   recordToAnswers,
   saveOnboarding,
+  setChosenUsername,
 } from '../../api/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -38,8 +41,9 @@ import { QuestionScreen } from './QuestionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
 import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
 import { FORCE_ONBOARDING } from '../../config';
-import { LottieEdgeFeather } from '../../components/LottieEdgeFeather';
+import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
 import { ScreenTransition } from '../../components/ScreenTransition';
+import { UsernameTakenError } from '../../api/errors';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -57,6 +61,12 @@ const BACK_BTN_IMG = onboardingSource(
 );
 
 // Counter +/- icons (provided SVGs, gray #657586).
+// Personalize-intro Kiki: she puts her cap on once, then the idle loops. Both
+// are 640x464 transparent-WebP at 22fps, cut so the idle's frame 0 is the cap's
+// closing frame.
+const INTRO_CAP = require('../../../assets/lottie/intro-cap.json');
+const INTRO_IDLE = require('../../../assets/lottie/intro-idle.json');
+
 const MINUS_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12H19" stroke="#657586" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const PLUS_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4.5V19.5M19.5 12H4.5" stroke="#657586" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -67,6 +77,7 @@ interface Props {
 }
 
 export function OnboardingFlow({ onComplete }: Props) {
+  const { t } = useTranslation();
   const { user, saveProfile, fetchProfile, personalizationStartsFromQuestions } = useAuth();
   const { language } = useLanguage();
   // Flow: 'intro' (Let's personalize + Get started) → 'profile' (name + avatar)
@@ -79,6 +90,9 @@ export function OnboardingFlow({ onComplete }: Props) {
   // If the backend already has a profile (username set) for this user, skip the
   // name/photo screen and go straight to the questions.
   const [skipProfile, setSkipProfile] = useState(false);
+  // A name the backend rejected on create, kept so the username screen can
+  // flag it and offer the alternatives the server suggested.
+  const [taken, setTaken] = useState<{ name: string; suggestions: string[] } | null>(null);
   // Default username seeded from the provider display name (Google/Facebook).
   const initialUsername = (user?.name ?? '')
     .replace(/[^A-Za-z0-9._]/g, '')
@@ -108,8 +122,8 @@ export function OnboardingFlow({ onComplete }: Props) {
     fetchProfile()
       .then((profile) => {
         if (cancelled) return;
-        // TESTING: FORCE_ONBOARDING keeps the username screen in the flow even
-        // when the backend already has one (it arrives prefilled for editing).
+        // A user who already has a username skips the screen; FORCE_ONBOARDING
+        // keeps it in the flow for testing (it arrives prefilled for editing).
         if (!FORCE_ONBOARDING && profile?.username) setSkipProfile(true);
       })
       .catch(() => {});
@@ -164,7 +178,18 @@ export function OnboardingFlow({ onComplete }: Props) {
       .then(() =>
         saveOnboarding({ answers: currentAnswers, preferredLanguage: language.code, method }),
       )
-      .catch((e) => console.warn('[Onboarding] sync failed', e?.message ?? e));
+      .catch((e) => {
+        if (e instanceof UsernameTakenError) {
+          // The name went stale between the check and the save. Send the user
+          // back to pick another rather than silently dropping their answers.
+          console.warn('[Onboarding] username taken on save', e.username, e.suggestions);
+          dirRef.current = 'pop';
+          setPhase('profile');
+          Alert.alert(t('onboarding.usernameTaken'));
+          return;
+        }
+        console.warn('[Onboarding] sync failed', e?.message ?? e);
+      });
   };
 
   const handleConfirm = () => {
@@ -233,6 +258,12 @@ export function OnboardingFlow({ onComplete }: Props) {
           setPhase('intro');
         }}
         onConfirm={async (username, photoUri) => {
+          // Claim the name here, at account creation. PATCH /profile is what
+          // enforces username uniqueness — it answers 409 "Username is already
+          // taken." — and unlike the onboarding create it needs no answers yet
+          // (that one 422s on the empty purpose at this point in the flow).
+          setChosenUsername(username);
+          setTaken(null);
           try {
             await saveProfile({ name: username, photoUri: photoUri ?? undefined });
             // Tracking contract rows 9a / 12 — only what the user changed here.
@@ -241,12 +272,22 @@ export function OnboardingFlow({ onComplete }: Props) {
             }
             if (photoUri) track.profileEdit('edit_profile_photo', 'profile_photo');
           } catch (e) {
+            if (e instanceof UsernameTakenError) {
+              // Stay put: the field flags the name and offers alternatives.
+              setTaken({ name: e.username, suggestions: e.suggestions });
+              return;
+            }
             console.warn('[Onboarding] save profile failed', e);
           }
           setPhase('questions');
         }}
-        initialValue={initialUsername}
+        // Deliberately blank: the Google/Facebook display name is not a
+        // username, and offering it as one nudged users into a name they had
+        // not chosen — usually the one already taken. They type their own.
+        initialValue=""
         initialPhotoUrl={user?.photo ?? null}
+        takenUsername={taken?.name ?? null}
+        takenSuggestions={taken?.suggestions ?? []}
       />
     );
   } else if (phase === 'welcome') {
@@ -299,10 +340,15 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Flat #eaf4fd — exactly the loading-bird Lottie's baked frame colour
-          (the airplane-loader question pages), so its slot is invisible. The
-          welcome bird's frames sit within 2/255 of this, so it blends too. */}
-      <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
+      {/* Original design gradient (12320-52201). The animations blend into it
+          via edge feathering — the in-app equivalent of the designer's soft
+          "Illustration" blur layers. */}
+      <LinearGradient
+        colors={['#eaf4ff', '#f2f9ff']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
         {/* Every phase/step change slides in (forward) or back (pop) rather than
             snapping — same motion language as the rest of the app. */}
@@ -324,6 +370,14 @@ export function OnboardingFlow({ onComplete }: Props) {
 function SetupIntro({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  // The idle sits mounted underneath, parked on frame 0 — which is the cap
+  // animation's closing frame — so it is already drawn when it is revealed.
+  const idleRef = useRef<LottieView>(null);
+  const [idling, setIdling] = useState(false);
+  const handleCapEnd = () => {
+    idleRef.current?.play();
+    setIdling(true);
+  };
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
   const rise = useRef(new Animated.Value(12)).current;
@@ -345,20 +399,37 @@ function SetupIntro({ onStart }: { onStart: () => void }) {
       <Animated.View
         style={[introStyles.center, { opacity, transform: [{ translateY: rise }, { scale }] }]}
       >
-        {/* Welcome-bird Lottie (Onboarding_Username_Intro 12320:52326,
-            250×191). Full frame — no zoom-crop, so the bird and its halo are
-            never cut off; the edge feather alone dissolves the frames' baked
-            corner vignette into the screen background. */}
+        {/* Kiki puts her cap on, then stands and blinks. Both are transparent
+            WebP on the same 640x464 canvas, so there is no baked background to
+            halo or feather away, and `contain` keeps the whole frame visible.
+            The cap's closing frame is byte-identical to the idle's frame 0, so
+            the switch is a straight cut on the same image. */}
         <View style={introStyles.birdLottieBox}>
-          <LottieView
-            source={require('../../../assets/lottie/welcome-bird.json')}
-            style={introStyles.birdLottieInner}
-            autoPlay
-            loop
-            resizeMode="cover"
-          />
-          {/* Thin top band — the bird's head sits near the frame top. */}
-          <LottieEdgeFeather color="#eaf4fd" top={0.08} bottom={0.2} side={0.16} />
+          <View
+            style={[introStyles.birdStack, { opacity: idling ? 1 : 0 }]}
+            pointerEvents="none"
+          >
+            <LottieView
+              ref={idleRef}
+              source={INTRO_IDLE}
+              style={introStyles.birdLottieInner}
+              autoPlay={false}
+              loop
+              resizeMode="contain"
+            />
+          </View>
+          {!idling ? (
+            <View style={introStyles.birdStack} pointerEvents="none">
+              <LottieView
+                source={INTRO_CAP}
+                style={introStyles.birdLottieInner}
+                autoPlay
+                loop={false}
+                onAnimationFinish={handleCapEnd}
+                resizeMode="contain"
+              />
+            </View>
+          ) : null}
         </View>
         <Text style={introStyles.title}>{t('onboarding.setupTitle')}</Text>
       </Animated.View>
@@ -388,13 +459,14 @@ const introStyles = StyleSheet.create({
     letterSpacing: -0.16,
   },
   bird: { width: sx(150), height: sy(118), marginBottom: sy(6) },
+  // The 640x464 canvas, at the height the previous 250x191 window used, so the
+  // whole frame shows: Kiki fills its full height and sits centred across it.
   birdLottieBox: {
-    width: sx(250),
+    width: sx(263),
     height: sx(191),
-    borderRadius: sx(24),
-    overflow: 'hidden',
     marginBottom: sy(6),
   },
+  birdStack: { ...StyleSheet.absoluteFillObject },
   birdLottieInner: { width: '100%', height: '100%' },
   title: {
     fontFamily: 'NationalPark_700Bold',
@@ -809,8 +881,6 @@ function Welcome({ name, onContinue }: { name: string; onContinue: () => void })
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  // Bird-Lottie frame background (see render comment).
-  flatBg: { backgroundColor: '#eaf4fd' },
   safe: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 

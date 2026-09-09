@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   Easing,
+  GestureResponderEvent,
   Image,
   ImageSourcePropType,
   Modal,
@@ -19,13 +20,27 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import LottieView from 'lottie-react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import LottieView from 'lottie-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { SIGNIN_BIRD_SVG, SIGNIN_TOP_CLOUD_SVG, SIGNIN_BOTTOM_CLOUD_SVG } from '../../assets/signInAssets';
+import { AutoFitTitle } from '../../components/AutoFitTitle';
+
+// Designer's looping login Kiki — a 720x533 transparent-WebP frame sequence
+// whose canvas aspect matches the design's 301x223 hero slot exactly, so it
+// drops straight into that box.
+const SIGNIN_LOOP = require('../../../assets/lottie/signin-loop.json');
+const LOOP_SPEED = 0.7;
+// The export is not a closed cycle: frame 0 sits ~47px higher than frame 30,
+// so looping the whole thing pops. Frames 12-27 are the hover, and the gap
+// between those two frames is a third of an ordinary frame-to-frame step, so
+// that window wraps invisibly and needs no cross-fade at all. (Measured over
+// the decoded frames; every other window is 6-7x worse.)
+const HOVER_START = 12;
+const HOVER_END = 27;
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -40,7 +55,8 @@ const ICON_FACEBOOK = onboardingSource(require('../../../assets/auth/facebook.pn
 
 interface Props {
   activeIndex?: number;
-  onPress?: () => void;
+  /** Pager tap handler: a tap on the hero/title area goes back a slide. */
+  onPress?: (e: GestureResponderEvent) => void;
   active?: boolean;
 }
 
@@ -81,7 +97,6 @@ export function SignIn({ onPress, active }: Props) {
   const [authLoading, setAuthLoading] = useState(false);
   const [policy, setPolicy] = useState<'terms' | 'privacy' | null>(null);
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const floatBird = useRef(new Animated.Value(0)).current;
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -93,13 +108,15 @@ export function SignIn({ onPress, active }: Props) {
   useEffect(() => {
     if (!active) return;
     Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver: true, easing: Easing.out(Easing.ease) }).start();
-    Animated.loop(Animated.sequence([
-      Animated.timing(floatBird, { toValue: 1, duration: 1750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(floatBird, { toValue: 0, duration: 1750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ])).start();
   }, [active]);
 
-  const birdY = floatBird.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
+  // Only spin the frame sequence while this page is the one on screen, and
+  // only over the seamless hover window.
+  const heroRef = useRef<LottieView>(null);
+  useEffect(() => {
+    if (active) heroRef.current?.play(HOVER_START, HOVER_END);
+    else heroRef.current?.pause();
+  }, [active]);
 
   const handleGooglePress = async () => {
     if (!active || authLoading || AppState.currentState !== 'active') return;
@@ -154,32 +171,37 @@ export function SignIn({ onPress, active }: Props) {
     <View style={styles.root}>
       {/* Flat #dbecf6 — exactly the login Lottie's baked frame background
           (SignUp_SignIn 12320:52240); clouds/glow removed per the Aug design. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatBg]} />
+      {/* Background + clouds come from the pager's shared panoramic layer
+          (its sign-in stop is the design's #cae3fe → #fcfeff gradient). */}
 
       {/* Logo */}
       {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bird + title/subtitle, anchored in the upper-middle of the screen.
-          The hero is the designer's login Lottie (301×223 design px, JPEG
-          frames on their own #dbecf6 background). */}
-      <View style={styles.topContent} pointerEvents="none">
+          The hero is the designer's looping login Lottie, 301×223 design px. */}
+      <Pressable style={styles.topContent} onPress={onPress}>
         <View style={styles.heroLottieBox}>
           <LottieView
-            source={require('../../../assets/lottie/signin-bird.json')}
-            style={styles.heroLottie}
-            autoPlay
+            ref={heroRef}
+            source={SIGNIN_LOOP}
             loop
-            resizeMode="cover"
+            speed={LOOP_SPEED}
+            style={styles.heroLottie}
+            resizeMode="contain"
           />
         </View>
 
         <Animated.View style={[styles.textColumn, { opacity: fadeAnim }]}>
           <View style={styles.headerText}>
-            <Text style={styles.titleMed}>{t('signIn.line1')}</Text>
-            <View style={styles.secondaryRow}>
+            {/* Long translations shrink uniformly to fit each line. */}
+            <AutoFitTitle maxWidth={W - sx(48)}>
+              <Text style={styles.titleMed}>{t('signIn.line1')}</Text>
+            </AutoFitTitle>
+            <AutoFitTitle maxWidth={W - sx(48)}>
               <Text style={styles.titleMed}>{t('signIn.line2Prefix')}</Text>
+              <View style={{ width: sx(6) }} />
               <Text style={styles.titleBold}>{t('signIn.line2Bold')}</Text>
-            </View>
+            </AutoFitTitle>
           </View>
           <View style={styles.subtitleRow}>
             <Text style={styles.subtitle}>{t('signIn.subtitle')}</Text>
@@ -188,7 +210,7 @@ export function SignIn({ onPress, active }: Props) {
             </View>
           </View>
         </Animated.View>
-      </View>
+      </Pressable>
 
       {/* Social sign-in + terms, anchored to the bottom of the screen. */}
       <Animated.View style={[styles.bottomGroup, { bottom: insets.bottom + sy(20), opacity: fadeAnim }]}>
@@ -282,23 +304,10 @@ export function SignIn({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#eaf4ff' },
-  cloudBottom: {
-    position: 'absolute',
-    left: 0,
-    top: sy(288),
-    width: sx(238),
-    height: sy(155),
-    opacity: 0.2,
-  },
-  cloudTop: {
-    position: 'absolute',
-    left: sx(241),
-    top: sy(94),
-    width: sx(134),
-    height: sy(103),
-    opacity: 0.5,
-  },
+  root: { width: '100%', height: '100%', overflow: 'hidden' },
+  // Cloud positions per SignUp_SignIn_Android (12320:52240).
+  cloudBottom: { position: 'absolute', left: sx(-3.5), top: sy(281), opacity: 0.2 },
+  cloudTop: { position: 'absolute', left: sx(231), top: sy(85), opacity: 0.5 },
   topContent: {
     position: 'absolute',
     top: sy(200),
@@ -308,7 +317,7 @@ const styles = StyleSheet.create({
     gap: sy(36),
   },
   // Flat screen background = the login Lottie's own frame color.
-  flatBg: { backgroundColor: '#dbecf6' },
+
   // Login hero Lottie (301×223 design px; bg matches the screen).
   heroLottieBox: { width: sx(301), height: sx(223) },
   heroLottie: { width: '100%', height: '100%' },

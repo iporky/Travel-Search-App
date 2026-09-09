@@ -18,6 +18,7 @@ import { OnboardingQuestion } from '../../api/onboarding';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import ProgressBar from '../../components/ProgressBar';
 import { ONBOARDING_ICON_SOURCES, AVATAR_SOURCE } from '../../assets/onboardingIcons';
+import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -113,9 +114,11 @@ export function QuestionScreen({
           12320:52339 "loading bird", 79×62; frames carry their own bg). */}
       <View style={styles.bubbleRow}>
         {/* Loading bird under the plane progress bar. Its frames carry a flat
-            #eaf4fd background — the same colour the screen is painted — so it
-            fills the slot edge to edge with no seam and needs no feather. */}
+            #eaf4fd background; the feather dissolves that into the screen's
+            gradient at this height (~#ecf5ff) — the designer's blur layer. */}
         <View style={styles.birdLottieBox}>
+          {/* Soft halo under the frames' own #eaf4fd — no edge anywhere. */}
+          <LottieHalo color="#eaf4fd" width={sx(79)} height={sx(62)} spread={sx(18)} />
           <LottieView
             source={require('../../../assets/lottie/question-bird.json')}
             style={styles.birdLottie}
@@ -123,6 +126,7 @@ export function QuestionScreen({
             loop
             resizeMode="cover"
           />
+          <LottieEdgeFeather color="#eaf4fd" top={0.1} bottom={0.12} side={0.1} />
         </View>
         <View style={styles.bubble}>
           <Text style={styles.bubbleText}>{question.prompt}</Text>

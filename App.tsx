@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, Component } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, NationalPark_400Regular, NationalPark_500Medium, NationalPark_600SemiBold, NationalPark_700Bold, NationalPark_800ExtraBold } from '@expo-google-fonts/national-park';
 // The Profile identity card's email line is Inter in the design (12276:94319).
 // Subpath import so Metro bundles only this one weight, not all 36 Inter files.
@@ -108,17 +109,26 @@ function AppContent() {
   if (user) {
     return (
       <SafeAreaProvider>
-        {/* One flat colour across the whole shell — including behind the
-            bottom tab bar — so every page reads as one uninterrupted surface.
-            Profile_Default and History_Default sit on Semantic/Surface/default
-            (#f2f9ff, from the Figma variable); the other tabs keep the
-            animation-matched #ecf4fe. */}
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            tab === 'profile' || tab === 'history' ? styles.appBgSurface : styles.appBg,
-          ]}
-        />
+        {/* One ground across the whole shell — including behind the bottom
+            tab bar — so every page reads as one uninterrupted surface. Home
+            uses its original design gradient (Home_Default 12320:52295);
+            Profile/History sit on Semantic/Surface/default (#f2f9ff); the
+            rest keep flat #ecf4fe. */}
+        {tab === 'home' ? (
+          <LinearGradient
+            colors={['#e9f3fe', '#f9fcff']}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+          />
+        ) : (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              tab === 'profile' || tab === 'history' ? styles.appBgSurface : styles.appBg,
+            ]}
+          />
+        )}
         <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
           <View style={styles.flex}>
             {/* Cross-fade between tabs instead of snapping. */}

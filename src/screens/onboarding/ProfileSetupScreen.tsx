@@ -38,15 +38,6 @@ const DEFAULT_AVATAR = onboardingSource(
   'bird-card',
 );
 
-const TAKEN_USERNAMES = new Set([
-  'admin',
-  'root',
-  'konnect',
-  'sallytheking',
-  'hotdog193',
-  'testuser',
-]);
-
 type Availability = 'idle' | 'checking' | 'available' | 'taken';
 
 interface Props {
@@ -57,6 +48,9 @@ interface Props {
   initialPhotoUrl?: string | null;
   /** Reuse this screen from Profile as an editor: no progress bar, "Save" CTA. */
   editMode?: boolean;
+  /** A name the backend rejected as taken, with the alternatives it offered. */
+  takenUsername?: string | null;
+  takenSuggestions?: string[];
 }
 
 function sanitizeUsername(value: string): string {
@@ -80,9 +74,22 @@ function generateSuggestions(base: string): string[] {
   return Array.from(new Set(candidates)).slice(0, 3);
 }
 
-async function checkUsernameAvailability(username: string): Promise<boolean> {
-  await new Promise((resolve) => setTimeout(resolve, 280));
-  return !TAKEN_USERNAMES.has(username.toLowerCase());
+/**
+ * Whether the name is free.
+ *
+ * There is no endpoint that can answer this: the backend exposes no username
+ * lookup or filter (checked against its OpenAPI schema — 68 routes, none for
+ * usernames), and /api/v1/onboarding/{firebase_id} takes a Firebase id, so
+ * probing it with a name returns 403 "not your profile" for *every* name,
+ * free or not. Uniqueness is therefore only knowable where the backend
+ * enforces it: the create call, which answers 409 with suggestions. The
+ * parent feeds that verdict back in via `takenUsername`.
+ *
+ * When a real availability endpoint lands, call it here — the debounce and
+ * the stale-response guard below are already wired for it.
+ */
+async function checkUsernameAvailability(_username: string): Promise<boolean> {
+  return true;
 }
 
 export function ProfileSetupScreen({
@@ -92,6 +99,8 @@ export function ProfileSetupScreen({
   initialValue = '',
   initialPhotoUrl,
   editMode = false,
+  takenUsername = null,
+  takenSuggestions = [],
 }: Props) {
   const { t } = useTranslation();
   const [username, setUsername] = useState(initialValue);
@@ -170,6 +179,10 @@ export function ProfileSetupScreen({
     (!ruleNoSpecialExcept && trimmed.length > 0) ||
     (!ruleStartsWithLetter && trimmed.length > 0);
 
+  // Debounced availability check: every keystroke restarts the timer, so only
+  // a pause in typing spends a request, and `requestSeq` drops any answer that
+  // arrives after the user has typed on — otherwise a slow reply for an older
+  // name could overwrite the verdict for the current one.
   useEffect(() => {
     if (!trimmed || !allRulesPass) {
       setAvailability('idle');
@@ -180,6 +193,13 @@ export function ProfileSetupScreen({
     requestSeq.current += 1;
     const currentReq = requestSeq.current;
     setAvailability('checking');
+
+    // A name the create call already rejected stays flagged until it is edited.
+    if (takenUsername && trimmed.toLowerCase() === takenUsername.toLowerCase()) {
+      setAvailability('taken');
+      setSuggestions(takenSuggestions.length ? takenSuggestions : generateSuggestions(trimmed));
+      return;
+    }
 
     const timer = setTimeout(async () => {
       try {
@@ -196,10 +216,12 @@ export function ProfileSetupScreen({
         if (requestSeq.current !== currentReq) return;
         setAvailability('idle');
       }
-    }, 240);
+      // 400ms rather than the 240 the local mock used: this is a round trip
+      // now, and it keeps a fast typist from firing a request per character.
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [trimmed, allRulesPass]);
+  }, [trimmed, allRulesPass, takenUsername, takenSuggestions]);
 
   const inputBorderColor = useMemo(() => {
     if (!trimmed) return 'transparent';

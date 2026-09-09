@@ -41,6 +41,7 @@ import { addUser } from '../api/users';
 import { verifyFirebaseSso } from '../api/auth';
 import { getProfile, updateProfile } from '../api/profile';
 import { FORCE_ONBOARDING } from '../config';
+import { UsernameTakenError } from '../api/errors';
 
 // Initialize the Facebook SDK once at module load (reads the app id / client
 // token from the native resources configured in AndroidManifest/strings.xml).
@@ -473,6 +474,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
       } catch (e) {
         console.warn('[Auth] saveProfile (PATCH /profile) failed', e);
+        // A taken username is the user's to resolve, so it has to reach the
+        // screen; everything else stays a warning, as before.
+        if (e instanceof UsernameTakenError) throw e;
       }
     },
     [],

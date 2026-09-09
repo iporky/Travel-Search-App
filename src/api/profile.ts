@@ -30,6 +30,7 @@ import DeviceInfo from 'react-native-device-info';
 import { Platform } from 'react-native';
 import { AUTH_API_URL } from '../config';
 import { getVisitorId } from '../utils/visitorId';
+import { UsernameTakenError, parseUsernameSuggestions, isUsernameConflict } from './errors';
 
 /** preferences block (web Profile: appearance / language / …). */
 export interface ProfilePreferences {
@@ -220,6 +221,12 @@ export async function updateProfile(args: UpdateProfileArgs): Promise<UserProfil
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // This endpoint is where username uniqueness is actually enforced — it
+    // answers 409 "Username is already taken." — so give the caller a typed
+    // error it can show on the username field rather than a bare string.
+    if (res.status === 409 && args.username && isUsernameConflict(text)) {
+      throw new UsernameTakenError(args.username, parseUsernameSuggestions(text));
+    }
     throw new Error(`updateProfile failed: HTTP ${res.status} ${text.slice(0, 200)}`);
   }
   const data = normalizeProfile((await res.json()) as RawUserProfile);

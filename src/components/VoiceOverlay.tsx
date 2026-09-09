@@ -2,10 +2,17 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageSourcePropType, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SvgXml } from 'react-native-svg';
+import Svg, {
+  Defs,
+  Ellipse as SvgEllipse,
+  RadialGradient as SvgRadialGradient,
+  Stop as SvgStop,
+  SvgXml,
+} from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { onboardingSource } from '../assets/onboardingAssets';
+import { LottieEdgeFeather, LottieHalo } from './LottieEdgeFeather';
 
 const VOICE_BIRD = onboardingSource(
   require('../../assets/voice/bird.png') as ImageSourcePropType,
@@ -49,8 +56,8 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Flat #fdfdfd — exactly the headphone-bird Lottie's baked frame
-          background (the idle bird lives on this audio screen only). */}
+      {/* Original design bg (Home_TypeVoice, Semantic/Accent/muted); the
+          idle bird's #fdfdfd frames feather into it — the designer's blur. */}
       <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
       <View style={styles.container}>
         <View style={styles.headerWrap}>
@@ -62,6 +69,25 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
         <View style={styles.middle}>
           {/* Headphone-bird Lottie (Home_TypeVoice 12320:52311, 160×160). */}
           <View style={styles.birdLottieBox}>
+            {/* Round glow UNDER the animation — the design's Ellipse 2104
+                (335×366 white blur behind the bird). The frames' #fdfdfd box
+                sits inside the glow's solid centre, so instead of a white
+                square the bird floats in the design's circular halo. */}
+            <Svg
+              width={335}
+              height={366}
+              style={styles.birdGlow}
+              pointerEvents="none"
+            >
+              <Defs>
+                <SvgRadialGradient id="voiceGlow" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <SvgStop offset="0" stopColor="#fdfdfd" stopOpacity={1} />
+                  <SvgStop offset="0.72" stopColor="#fdfdfd" stopOpacity={1} />
+                  <SvgStop offset="1" stopColor="#fdfdfd" stopOpacity={0} />
+                </SvgRadialGradient>
+              </Defs>
+              <SvgEllipse cx={167.5} cy={183} rx={167.5} ry={183} fill="url(#voiceGlow)" />
+            </Svg>
             <LottieView
               source={require('../../assets/lottie/home-idle.json')}
               style={styles.birdLottie}
@@ -69,6 +95,7 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
               loop
               resizeMode="cover"
             />
+            <LottieEdgeFeather color="#fdfdfd" top={0.1} bottom={0.12} side={0.1} />
           </View>
           {/* Live-caption slot: a fixed-height box that is ALWAYS laid out, so
               the bird never shifts when text appears. The text is pinned to
@@ -139,8 +166,7 @@ const styles = StyleSheet.create({
     zIndex: 6,
     elevation: 6,
   },
-  // Flat screen background = the headphone-bird Lottie's own frame color.
-  flatBg: { backgroundColor: '#fdfdfd' },
+  flatBg: { backgroundColor: '#eaefff' },
   bird: {
     width: 188,
     height: 188,
@@ -148,6 +174,8 @@ const styles = StyleSheet.create({
     elevation: 7,
   },
   birdLottieBox: { width: 160, height: 160, zIndex: 7, elevation: 7 },
+  // Design's Ellipse 2104, centred on the bird (a touch high, per the frame).
+  birdGlow: { position: 'absolute', left: (160 - 335) / 2, top: (160 - 366) / 2 - 10 },
   birdLottie: { width: '100%', height: '100%' },
   // 3 caption lines tall, top-clipped so the newest words always show.
   transcriptSlot: {
