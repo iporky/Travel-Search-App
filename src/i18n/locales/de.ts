@@ -204,6 +204,12 @@ const de = {
     noResultsTitle: 'Keine passenden Ergebnisse',
     noResultsBody: 'Versuche ein anderes Stichwort',
     loadError: 'Verlauf konnte nicht geladen werden.',
+    untitled: 'Neue Unterhaltung',
+    questionCount: '{{count}} Fragen',
+    conversationLoadError: 'Diese Unterhaltung konnte nicht geladen werden.',
+    noAnswer: 'Zu dieser Frage wurde keine Antwort gespeichert.',
+    earlierMessagesHidden: 'Frühere Nachrichten dieser Unterhaltung werden nicht angezeigt.',
+    unavailable: 'Der Unterhaltungsverlauf ist derzeit nicht verfügbar.',
     resultsCount: '{{count}} Ergebnisse',
     for: 'für',
     noResults: 'Keine Ergebnisse gefunden.',
@@ -472,6 +478,14 @@ const de = {
     askPlaceholder: 'Frag mich alles',
     askPlaceholderExpanded: 'Frag mich alles!',
     trendingSearches: 'Angesagte Suchen',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "Suche zum Beispiel",
+      noResultsTitle: "Keine passenden Ergebnisse",
+      noResultsBody: "Versuche ein anderes Stichwort",
+      errorTitle: "Vorschläge nicht verfügbar",
+      errorBody: "Du kannst trotzdem mit deinem Stichwort suchen",
+    },
     suggestions: {
       visa: 'Ein koreanisches Visum beantragen',
       chicken: 'Koreanisches Fried Chicken in der Nähe',
@@ -541,6 +555,8 @@ const de = {
     sources: 'Quellen',
     related: 'Ähnliche Fragen',
     error: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+    interpretedAs: 'Verstanden als',
+    searchAsTyped: 'Wörtlich suchen',
   },
   signIn: {
     line1: 'Wir bringen dich',

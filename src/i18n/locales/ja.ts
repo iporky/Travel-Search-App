@@ -204,6 +204,12 @@ const ja = {
     noResultsTitle: '一致する結果がありません',
     noResultsBody: '別のキーワードをお試しください',
     loadError: '履歴を読み込めませんでした。',
+    untitled: '新しい会話',
+    questionCount: '{{count}}件の質問',
+    conversationLoadError: 'この会話を読み込めませんでした。',
+    noAnswer: 'この質問への回答は記録されていません。',
+    earlierMessagesHidden: 'この会話の以前のメッセージは表示されません。',
+    unavailable: '会話履歴は現在ご利用いただけません。',
     resultsCount: '{{count}}件の結果',
     for: '·',
     noResults: '結果が見つかりません。',
@@ -472,6 +478,14 @@ const ja = {
     askPlaceholder: '何でも聞いてください',
     askPlaceholderExpanded: '何でも聞いてください！',
     trendingSearches: '人気の検索',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "こちらを検索してみましょう",
+      noResultsTitle: "一致する結果がありません",
+      noResultsBody: "別のキーワードをお試しください",
+      errorTitle: "候補を表示できません",
+      errorBody: "入力したキーワードでそのまま検索できます",
+    },
     suggestions: {
       visa: '韓国のビザを申請する',
       chicken: '近くの韓国フライドチキン',
@@ -541,6 +555,8 @@ const ja = {
     sources: '参照元',
     related: '関連する質問',
     error: '問題が発生しました。もう一度お試しください。',
+    interpretedAs: '次のように解釈しました',
+    searchAsTyped: '入力どおりに検索',
   },
   signIn: {
     line1: '韓国を',

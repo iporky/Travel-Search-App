@@ -1,14 +1,13 @@
 import React from 'react';
 import {
-  DimensionValue,
   Dimensions,
   Image,
   ImageSourcePropType,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { PressableScale as Pressable } from './PressableScale';
 import { useTranslation } from 'react-i18next';
 import {
   CASHBACK_STEP1_SOURCE,
@@ -29,7 +28,8 @@ const sx = (n: number) => (n * W) / DESIGN_W;
  * Per the designer's implementation note on the image frames: the 120×79 frame
  * is the same on every row, but each illustration has its own size and offset
  * inside it *on purpose*. So each step carries its own width/height/offset and
- * the images are never normalised or stretched to fill the frame.
+ * the images are never normalised or stretched to fill the frame. The artwork
+ * is the designer's Banner_Mobile hand-off (202609_1), used byte-for-byte.
  */
 
 type Step = {
@@ -41,24 +41,13 @@ type Step = {
   /** Offset from the frame's centre (design px). */
   dx: number;
   dy: number;
-  /**
-   * Step 2's artwork is cropped by its frame rather than fitted: the source is
-   * drawn oversized and clipped, which is how it sits in Figma.
-   */
-  crop?: { width: DimensionValue; height: DimensionValue; left: DimensionValue; top: DimensionValue };
 };
 
 const STEPS: readonly Step[] = [
   { key: 'taxi', source: CASHBACK_STEP1_SOURCE, w: 115, h: 77, dx: -0.62, dy: 1.09 },
-  {
-    key: 'receipt',
-    source: CASHBACK_STEP2_SOURCE,
-    w: 117,
-    h: 71,
-    dx: 2.38,
-    dy: 3.43,
-    crop: { width: '131.93%', height: '161.25%', left: '-17.52%', top: '-20.65%' },
-  },
+  // The designer's hand-off export of step 2 is already cropped to its
+  // intended framing, so it is placed like the other two rather than clipped.
+  { key: 'receipt', source: CASHBACK_STEP2_SOURCE, w: 117, h: 71, dx: 2.38, dy: 3.43 },
   { key: 'cashback', source: CASHBACK_STEP3_SOURCE, w: 116, h: 77, dx: -2.12, dy: 1.76 },
 ];
 
@@ -90,7 +79,7 @@ export function ReceiptStepsBanner({
       accessibilityLabel={t('home.receiptSteps.cta')}
     >
       {STEPS.map((step, i) => (
-        <View key={step.key} style={[styles.card, i > 0 && styles.cardGap]}>
+        <View key={step.key} style={styles.card}>
           <View style={styles.imageFrame}>
             <View
               style={{
@@ -99,14 +88,9 @@ export function ReceiptStepsBanner({
                 height: sx(step.h),
                 left: (sx(120) - sx(step.w)) / 2 + sx(step.dx),
                 top: (sx(79) - sx(step.h)) / 2 + sx(step.dy),
-                overflow: step.crop ? 'hidden' : 'visible',
               }}
             >
-              <Image
-                source={step.source}
-                style={step.crop ? { position: 'absolute', ...step.crop } : styles.stepImage}
-                resizeMode={step.crop ? 'stretch' : 'cover'}
-              />
+              <Image source={step.source} style={styles.stepImage} resizeMode="cover" />
             </View>
           </View>
 
@@ -142,7 +126,6 @@ const styles = StyleSheet.create({
     borderColor: '#c9e3ff',
     borderRadius: sx(4),
   },
-  cardGap: { marginTop: sx(6) },
   imageFrame: { width: sx(120), height: sx(79) },
   stepImage: { width: '100%', height: '100%' },
   label: {

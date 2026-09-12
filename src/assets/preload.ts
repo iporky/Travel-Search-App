@@ -11,7 +11,6 @@ const APP_ASSETS: number[] = [
   // Onboarding questionnaire icons + mascot bird are 512px PNGs rendered by
   // Android resource name ({uri}) in onboardingIcons.ts — bundled via their own
   // require() there, so nothing to preload here.
-  require('../../assets/onboarding/airplane.png'),
   require('../../assets/onboarding/chevron-left.png'),
   require('../../assets/onboarding/track.png'),
   require('../../assets/onboarding/road-path.png'),

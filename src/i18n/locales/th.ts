@@ -204,6 +204,12 @@ const th = {
     noResultsTitle: 'ไม่พบผลลัพธ์ที่ตรงกัน',
     noResultsBody: 'ลองใช้คำค้นหาอื่น',
     loadError: 'โหลดประวัติไม่สำเร็จ',
+    untitled: 'การสนทนาใหม่',
+    questionCount: '{{count}} คำถาม',
+    conversationLoadError: 'โหลดการสนทนานี้ไม่ได้',
+    noAnswer: 'ไม่มีคำตอบที่บันทึกไว้สำหรับคำถามนี้',
+    earlierMessagesHidden: 'ข้อความก่อนหน้าในการสนทนานี้ไม่แสดง',
+    unavailable: 'ขณะนี้ประวัติการสนทนาไม่พร้อมใช้งาน',
     resultsCount: 'ผลลัพธ์ {{count}} รายการ',
     for: 'สำหรับ',
     noResults: 'ไม่พบผลลัพธ์',
@@ -472,6 +478,14 @@ const th = {
     askPlaceholder: 'ถามอะไรก็ได้',
     askPlaceholderExpanded: 'ถามอะไรก็ได้!',
     trendingSearches: 'การค้นหายอดนิยม',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "ลองค้นหา",
+      noResultsTitle: "ไม่พบผลลัพธ์ที่ตรงกัน",
+      noResultsBody: "ลองใช้คำค้นหาอื่น",
+      errorTitle: "ไม่สามารถแสดงคำแนะนำได้",
+      errorBody: "คุณยังค้นหาด้วยคำค้นหาของคุณได้",
+    },
     suggestions: {
       visa: 'ขอวีซ่าเกาหลี',
       chicken: 'ไก่ทอดเกาหลีใกล้ฉัน',
@@ -541,6 +555,8 @@ const th = {
     sources: 'แหล่งที่มา',
     related: 'คำถามที่เกี่ยวข้อง',
     error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+    interpretedAs: 'ตีความว่า',
+    searchAsTyped: 'ค้นหาตามที่พิมพ์',
   },
   signIn: {
     line1: 'ให้เราพาคุณ',

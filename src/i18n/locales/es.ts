@@ -204,6 +204,12 @@ const es = {
     noResultsTitle: 'Sin resultados coincidentes',
     noResultsBody: 'Prueba con otra palabra clave',
     loadError: 'No se pudo cargar tu historial.',
+    untitled: 'Nueva conversación',
+    questionCount: '{{count}} preguntas',
+    conversationLoadError: 'No se pudo cargar esta conversación.',
+    noAnswer: 'No se registró ninguna respuesta a esta pregunta.',
+    earlierMessagesHidden: 'Los mensajes anteriores de esta conversación no se muestran.',
+    unavailable: 'El historial de conversaciones no está disponible ahora mismo.',
     resultsCount: '{{count}} resultados',
     for: 'para',
     noResults: 'Sin resultados.',
@@ -472,6 +478,14 @@ const es = {
     askPlaceholder: 'Pregúntame lo que sea',
     askPlaceholderExpanded: '¡Pregúntame lo que sea!',
     trendingSearches: 'Búsquedas populares',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "Prueba a buscar",
+      noResultsTitle: "Sin resultados coincidentes",
+      noResultsBody: "Prueba con otra palabra clave",
+      errorTitle: "Sugerencias no disponibles",
+      errorBody: "Aún puedes buscar con tu palabra clave",
+    },
     suggestions: {
       visa: 'Solicitar una visa coreana',
       chicken: 'Pollo frito coreano cerca',
@@ -541,6 +555,8 @@ const es = {
     sources: 'Fuentes',
     related: 'Preguntas relacionadas',
     error: 'Algo salió mal. Inténtalo de nuevo.',
+    interpretedAs: 'Interpretado como',
+    searchAsTyped: 'Buscar tal cual',
   },
   signIn: {
     line1: 'Vamos a que te muevas',

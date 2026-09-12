@@ -1,5 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, ImageSourcePropType, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, ImageSourcePropType, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  runOnJS,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
@@ -34,32 +45,78 @@ type Props = {
 
 export function VoiceOverlay({ visible, onClose, transcript, listening = true }: Props) {
   const { t } = useTranslation();
-  const pulse = useRef(new Animated.Value(0)).current;
+  // The window appears at once (animationType none) and the content eases in
+  // with a fade and a short rise, then eases out before the window closes —
+  // so opening from the mic never snaps.
+  const [mounted, setMounted] = useState(visible);
+  const reveal = useSharedValue(0);
+  // The bird Lottie is shown only once its frames are decoded, so it fades
+  // in rather than popping mid-reveal.
+  const bird = useSharedValue(0);
+  const birdShown = useRef(false);
+  const revealBird = () => {
+    if (birdShown.current) return;
+    birdShown.current = true;
+    bird.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.ease) });
+  };
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      birdShown.current = false;
+      bird.value = 0;
+      reveal.value = withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) });
+      const fallback = setTimeout(revealBird, 900);
+      return () => clearTimeout(fallback);
+    }
+    if (mounted) {
+      reveal.value = withTiming(0, { duration: 220, easing: Easing.in(Easing.quad) }, (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+  const revealStyle = useAnimatedStyle(() => ({ opacity: reveal.value }));
+  const riseStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - reveal.value) * 16 }] }));
+  const birdStyle = useAnimatedStyle(() => ({ opacity: bird.value }));
+  // Breathing pulse, looped on the UI thread while the overlay is up.
+  const pulse = useSharedValue(0);
 
   useEffect(() => {
-    if (!visible) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
+    if (!visible) {
+      cancelAnimation(pulse);
+      pulse.value = 0;
+      return;
+    }
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
     );
-    loop.start();
-    return () => loop.stop();
+    return () => cancelAnimation(pulse);
   }, [visible, pulse]);
 
-  const micScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
-  const outerScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
-  const middleScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
-  const outerOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0.2] });
-  const middleOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.34] });
+  const outerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [0.32, 0.2]),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.12]) }],
+  }));
+  const middleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [0.5, 0.34]),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.06]) }],
+  }));
+  const micStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.08]) }],
+  }));
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[StyleSheet.absoluteFill, revealStyle]}>
       {/* Original design bg (Home_TypeVoice, Semantic/Accent/muted); the
           idle bird's #fdfdfd frames feather into it — the designer's blur. */}
       <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
-      <View style={styles.container}>
+      <Animated.View style={[styles.container, riseStyle]}>
         <View style={styles.headerWrap}>
           <Text style={[typography.heading35Semibold, styles.title]}>
             {listening ? t('voice.listening') : t('voice.processing')}
@@ -88,13 +145,16 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
               </Defs>
               <SvgEllipse cx={167.5} cy={183} rx={167.5} ry={183} fill="url(#voiceGlow)" />
             </Svg>
-            <LottieView
-              source={require('../../assets/lottie/home-idle.json')}
-              style={styles.birdLottie}
-              autoPlay
-              loop
-              resizeMode="cover"
-            />
+            <Animated.View style={[styles.birdLottie, birdStyle]}>
+              <LottieView
+                source={require('../../assets/lottie/home-idle.json')}
+                style={styles.birdLottie}
+                autoPlay
+                loop
+                resizeMode="cover"
+                onAnimationLoaded={revealBird}
+              />
+            </Animated.View>
             <LottieEdgeFeather color="#fdfdfd" top={0.1} bottom={0.12} side={0.1} />
           </View>
           {/* Live-caption slot: a fixed-height box that is ALWAYS laid out, so
@@ -112,26 +172,23 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
           </Pressable>
 
           <View style={styles.micWrap}>
-            <Animated.View
-              style={[styles.ringOuter, { opacity: outerOpacity, transform: [{ scale: outerScale }] }]}
-            />
-            <Animated.View
-              style={[styles.ringMiddle, { opacity: middleOpacity, transform: [{ scale: middleScale }] }]}
-            />
+            <Animated.View style={[styles.ringOuter, outerStyle]} />
+            <Animated.View style={[styles.ringMiddle, middleStyle]} />
             <LinearGradient
               colors={['#FFFFFF', '#D9D6FF']}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
               style={styles.ringInner}
             />
-            <Animated.View style={[styles.mic, { transform: [{ scale: micScale }] }]}>
+            <Animated.View style={[styles.mic, micStyle]}>
               <SvgXml xml={MIC_SELECTED_SVG} width={26} height={26} />
             </Animated.View>
           </View>
 
           <View style={{ width: 48 }} />
         </View>
-      </View>
+      </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

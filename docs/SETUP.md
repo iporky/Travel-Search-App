@@ -161,7 +161,7 @@ fingerprint). Without this, Google sign-in returns no `idToken`.
 
 ### 3. Backend endpoints
 
-All API hosts live in `src/config/index.ts` (currently `dev.konnect.kr`).
+All API hosts derive from `API_HOST` in `src/config/index.ts` (default `staging.konnect.kr`; override per build with `EXPO_PUBLIC_API_HOST`, see `.env.example` — run `cd android && ./gradlew clean` after changing it, the bundle task does not track `.env`).
 Flags to know:
 
 - `USE_MOCKS` — non-search APIs mocked when `true`.

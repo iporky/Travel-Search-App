@@ -1,8 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
-  Animated,
   Dimensions,
-  Easing,
   GestureResponderEvent,
   Image,
   ImageSourcePropType,
@@ -11,7 +9,17 @@ import {
   Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
@@ -53,75 +61,115 @@ const BIRD_CX = 188;
 const BIRD_CY = 342;
 const BIRD_W = 240;
 const BIRD_H = 176;
+const ORIGIN_X = sx(BIRD_CX);
+const ORIGIN_Y = sy(BIRD_CY);
 
-export function SplashWelcome2({ onPress, active }: Props) {
-  const { t } = useTranslation();
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const birdScale = useRef(new Animated.Value(0.92)).current;
-  const birdRise  = useRef(new Animated.Value(0)).current;
-  const birdFloat = useRef(new Animated.Value(0)).current;
-  const birdTilt  = useRef(new Animated.Value(0)).current;
-  // per-icon entrance (bloom from centre) + gentle float
-  const entrances = useRef(ICONS.map(() => new Animated.Value(0))).current;
-  const floats    = useRef(ICONS.map(() => new Animated.Value(0))).current;
+const sine = Easing.inOut(Easing.sin);
+// Worklet-safe distances (the sx/sy helpers are JS-thread functions).
+const BUBBLE_FLOAT_AMP = sy(10);
+const BIRD_RISE_FROM = sy(80);
+const BIRD_FLOAT_AMP = sy(12);
+
+/**
+ * One service-icon bubble: blooms out from the bird's centre when the slide
+ * becomes active (scale 0→1, fade in, 150 ms stagger), then floats gently
+ * for as long as it is mounted. All on the UI thread.
+ */
+function IconBubble({ it, i, active }: { it: (typeof ICONS)[number]; i: number; active: boolean }) {
+  const entrance = useSharedValue(0);
+  const float = useSharedValue(0);
+
+  useEffect(() => {
+    const dur = 1000 + i * 100;
+    float.value = withDelay(
+      i * 150,
+      withRepeat(withSequence(withTiming(1, { duration: dur, easing: sine }), withTiming(0, { duration: dur, easing: sine })), -1, false),
+    );
+  }, [float, i]);
 
   useEffect(() => {
     if (!active) return;
-    fadeAnim.setValue(0); birdScale.setValue(0.9); birdRise.setValue(0);
-    birdFloat.setValue(0); birdTilt.setValue(0);
-    entrances.forEach((e) => e.setValue(0));
+    entrance.value = 0;
+    entrance.value = withDelay(400 + i * 150, withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }));
+  }, [active, entrance, i]);
 
-    // Bird rises up from below, scale 90% → 100%, settle at centre.
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-      Animated.timing(birdRise, { toValue: 1, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.spring(birdScale, { toValue: 1.0, friction: 6, tension: 70, useNativeDriver: true }),
-    ]).start();
+  const left = sx(it.cx - it.size / 2);
+  const top = sy(it.cy - it.size / 2);
+  const size = sx(it.size);
+  const cx = left + size / 2;
+  const cy = top + size / 2;
+  const rotate = it.rotate;
+  const restOpacity = it.opacity;
 
-    // Icons bloom outward from centre, scale 0 → 100%, fade in, 0.15s stagger.
-    Animated.parallel(
-      entrances.map((e, i) =>
-        Animated.sequence([
-          Animated.delay(400 + i * 150),
-          Animated.timing(e, { toValue: 1, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        ]),
-      ),
-    ).start();
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(entrance.value, [0, 1], [0, restOpacity]),
+    transform: [
+      { translateX: interpolate(entrance.value, [0, 1], [ORIGIN_X - cx, 0]) },
+      { translateY: interpolate(entrance.value, [0, 1], [ORIGIN_Y - cy, 0]) },
+      { rotate },
+      { translateY: interpolate(float.value, [0, 1], [0, -BUBBLE_FLOAT_AMP]) },
+      { scale: entrance.value },
+    ],
+  }));
 
-    Animated.loop(Animated.sequence([
-      Animated.timing(birdFloat, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(birdFloat, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ])).start();
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', left, top, width: size, height: size, alignItems: 'center', justifyContent: 'center' }, style]}
+    >
+      <View style={[styles.bubble, { width: size, height: size, borderRadius: size / 2 }]}>
+        <Image source={it.icon} style={{ width: sx(it.imgW), height: sy(it.imgH) }} resizeMode="contain" />
+      </View>
+    </Animated.View>
+  );
+}
 
-    Animated.loop(Animated.sequence([
-      Animated.timing(birdTilt, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(birdTilt, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ])).start();
-  }, [active]);
+export function SplashWelcome2({ onPress, active }: Props) {
+  const { t } = useTranslation();
+  const fade = useSharedValue(0);
+  const birdScale = useSharedValue(0.92);
+  const birdRise = useSharedValue(0);
+  const birdFloat = useSharedValue(0);
+  const birdTilt = useSharedValue(0);
 
   useEffect(() => {
-    const anims = floats.map((v, i) =>
-      Animated.loop(Animated.sequence([
-        Animated.delay(i * 150),
-        Animated.timing(v, { toValue: 1, duration: 1000 + i * 100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: 1000 + i * 100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])));
-    anims.forEach((a) => a.start());
-    return () => anims.forEach((a) => a.stop());
-  }, []);
+    if (!active) return;
+    fade.value = 0;
+    birdScale.value = 0.9;
+    birdRise.value = 0;
+    birdFloat.value = 0;
+    birdTilt.value = 0;
 
-  const ty = (v: Animated.Value, amp = sy(10)) => v.interpolate({ inputRange: [0, 1], outputRange: [0, -amp] });
+    // Bird rises up from below, scale 90% → 100%, settles at centre.
+    fade.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) });
+    birdRise.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.cubic) });
+    birdScale.value = withSpring(1, { damping: 11, stiffness: 90 });
 
-  const birdTranslateY = birdRise.interpolate({ inputRange: [0, 1], outputRange: [sy(80), 0] });
-  const birdFloatY = birdFloat.interpolate({ inputRange: [0, 1], outputRange: [0, -sy(12)] });
-  const birdRotate = birdTilt.interpolate({ inputRange: [0, 1], outputRange: ['-1.6deg', '1.6deg'] });
+    birdFloat.value = withRepeat(
+      withSequence(withTiming(1, { duration: 1700, easing: sine }), withTiming(0, { duration: 1700, easing: sine })),
+      -1,
+      false,
+    );
+    birdTilt.value = withRepeat(
+      withSequence(withTiming(1, { duration: 2200, easing: sine }), withTiming(0, { duration: 2200, easing: sine })),
+      -1,
+      false,
+    );
+  }, [active, fade, birdScale, birdRise, birdFloat, birdTilt]);
 
-  const ORIGIN_X = sx(BIRD_CX);
-  const ORIGIN_Y = sy(BIRD_CY);
+  const birdStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [
+      { translateY: interpolate(birdRise.value, [0, 1], [BIRD_RISE_FROM, 0]) },
+      { translateY: interpolate(birdFloat.value, [0, 1], [0, -BIRD_FLOAT_AMP]) },
+      { rotate: `${interpolate(birdTilt.value, [0, 1], [-1.6, 1.6])}deg` },
+      { scale: birdScale.value },
+    ],
+  }));
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-
       {/* Soft radial glow behind the hero bird (small positioned SVG). */}
       <Svg
         style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(BIRD_CY) - sy(215), width: sx(470), height: sy(430) }}
@@ -137,51 +185,29 @@ export function SplashWelcome2({ onPress, active }: Props) {
       </Svg>
 
       {/* Floating service-icon bubbles */}
-      {ICONS.map((it, i) => {
-        const left = sx(it.cx - it.size / 2);
-        const top = sy(it.cy - it.size / 2);
-        const size = sx(it.size);
-        const cx = left + size / 2;
-        const cy = top + size / 2;
-        const e = entrances[i];
-        const tx = e.interpolate({ inputRange: [0, 1], outputRange: [ORIGIN_X - cx, 0] });
-        const tyE = e.interpolate({ inputRange: [0, 1], outputRange: [ORIGIN_Y - cy, 0] });
-        const scaleE = e.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-        const opE = e.interpolate({ inputRange: [0, 1], outputRange: [0, it.opacity] });
-        return (
-          <Animated.View
-            key={i}
-            pointerEvents="none"
-            style={{
-              position: 'absolute', left, top, width: size, height: size,
-              opacity: opE, alignItems: 'center', justifyContent: 'center',
-              transform: [{ translateX: tx }, { translateY: tyE }, { rotate: it.rotate }, { translateY: ty(floats[i]) }, { scale: scaleE }],
-            }}
-          >
-            <View style={[styles.bubble, { width: size, height: size, borderRadius: size / 2 }]}>
-              <Image source={it.icon} style={{ width: sx(it.imgW), height: sy(it.imgH) }} resizeMode="contain" />
-            </View>
-          </Animated.View>
-        );
-      })}
+      {ICONS.map((it, i) => (
+        <IconBubble key={i} it={it} i={i} active={!!active} />
+      ))}
 
       {/* Hero bird — rises from below and settles at centre. Rendered via SvgXml
           (react-native-svg) instead of <Image>: the embedded raster decodes
           through react-native-svg's own path, which renders reliably here. */}
       <Animated.View
         pointerEvents="none"
-        style={{
-          position: 'absolute', left: sx(BIRD_CX - BIRD_W / 2), top: sy(BIRD_CY - BIRD_H / 2),
-          width: sx(BIRD_W), height: sy(BIRD_H), opacity: fadeAnim,
-          transform: [{ translateY: birdTranslateY }, { translateY: birdFloatY }, { rotate: birdRotate }, { scale: birdScale }],
-        }}
+        style={[
+          {
+            position: 'absolute', left: sx(BIRD_CX - BIRD_W / 2), top: sy(BIRD_CY - BIRD_H / 2),
+            width: sx(BIRD_W), height: sy(BIRD_H),
+          },
+          birdStyle,
+        ]}
       >
         <SvgXml xml={SCREEN2_BIRD_SVG} width={sx(BIRD_W)} height={sy(BIRD_H)} />
       </Animated.View>
 
       {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
-      <Animated.View style={[styles.contentContainer, { bottom: sy(129), opacity: fadeAnim, paddingHorizontal: sx(16) }]}>
+      <Animated.View style={[styles.contentContainer, { bottom: sy(129), paddingHorizontal: sx(16) }, fadeStyle]}>
         <View style={styles.textBlock}>
           {/* Long translations shrink uniformly to fit one line. */}
           <AutoFitTitle maxWidth={W - sx(40)}>

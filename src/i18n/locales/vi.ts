@@ -204,6 +204,12 @@ const vi = {
     noResultsTitle: 'Không có kết quả phù hợp',
     noResultsBody: 'Thử một từ khóa khác',
     loadError: 'Không tải được lịch sử của bạn.',
+    untitled: 'Cuộc trò chuyện mới',
+    questionCount: '{{count}} câu hỏi',
+    conversationLoadError: 'Không tải được cuộc trò chuyện này.',
+    noAnswer: 'Không có câu trả lời nào được lưu cho câu hỏi này.',
+    earlierMessagesHidden: 'Các tin nhắn trước đó trong cuộc trò chuyện này không được hiển thị.',
+    unavailable: 'Lịch sử trò chuyện hiện không khả dụng.',
     resultsCount: '{{count}} kết quả',
     for: 'cho',
     noResults: 'Không tìm thấy kết quả.',
@@ -472,6 +478,14 @@ const vi = {
     askPlaceholder: 'Hỏi tôi bất cứ điều gì',
     askPlaceholderExpanded: 'Hỏi tôi bất cứ điều gì!',
     trendingSearches: 'Tìm kiếm thịnh hành',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "Thử tìm kiếm",
+      noResultsTitle: "Không có kết quả phù hợp",
+      noResultsBody: "Hãy thử từ khóa khác",
+      errorTitle: "Không thể tải gợi ý",
+      errorBody: "Bạn vẫn có thể tìm với từ khóa của mình",
+    },
     suggestions: {
       visa: 'Xin visa Hàn Quốc',
       chicken: 'Gà rán Hàn Quốc gần đây',
@@ -541,6 +555,8 @@ const vi = {
     sources: 'Nguồn',
     related: 'Câu hỏi liên quan',
     error: 'Đã xảy ra lỗi. Vui lòng thử lại.',
+    interpretedAs: 'Được hiểu là',
+    searchAsTyped: 'Tìm đúng như đã nhập',
   },
   signIn: {
     line1: 'Hãy để chúng tôi đưa bạn',

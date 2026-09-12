@@ -1,19 +1,25 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   GestureResponderEvent,
   Image,
   ImageSourcePropType,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
@@ -133,6 +139,36 @@ interface Props {
   initialSignInIndex?: boolean;
 }
 
+/**
+ * One pager page. Panoramic transition: the content glides at finger speed
+ * over the shared background (no offset/scale — that read as a separate
+ * screen arriving), with only a gentle fade for depth. The fade is a worklet
+ * reading the scroll offset on the UI thread, so it costs no JS per frame.
+ */
+function Page({
+  index,
+  width,
+  height,
+  scrollX,
+  children,
+}: {
+  index: number;
+  width: number;
+  height: number;
+  scrollX: SharedValue<number>;
+  children: React.ReactNode;
+}) {
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollX.value,
+      [(index - 1) * width, index * width, (index + 1) * width],
+      [0.45, 1, 0.45],
+      Extrapolation.CLAMP,
+    ),
+  }));
+  return <Animated.View style={[{ width, height }, style]}>{children}</Animated.View>;
+}
+
 export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) {
   const SIGNIN_SLIDE = SLIDES.length - 1; // index 4
   const insets = useSafeAreaInsets();
@@ -147,23 +183,33 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
   const [showLanguage, setShowLanguage] = useState(false);
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
-  const scrollRef = useRef<ScrollView>(null);
-  // Horizontal scroll offset — drives the per-page slide/fade entirely on the
-  // native thread (no JS round-trip), so the transition tracks the finger at
-  // 60fps and settles with the pager's own deceleration.
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Horizontal scroll offset — a shared value written by the scroll handler
+  // on the UI thread, so the page fades and the parallax world track the
+  // finger at 60fps with no JS round-trip and settle with the pager's own
+  // deceleration.
+  const scrollX = useSharedValue(initialSignInIndex ? SIGNIN_SLIDE * winW : 0);
 
   // Page index after any scroll settles, finger or tap. A plain ScrollView
   // rather than a FlatList: five static pages need no virtualization, and a
   // virtualized list would run viewability and cell bookkeeping in JS on every
   // scroll event, so this keeps the JS thread idle while the pager moves.
   const onMomentumEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const next = Math.round(e.nativeEvent.contentOffset.x / winW);
+    (x: number) => {
+      const next = Math.round(x / winW);
       if (next !== activeIndexRef.current) setActiveIndex(next);
     },
     [winW],
   );
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+    },
+    onMomentumEnd: (e) => {
+      runOnJS(onMomentumEnd)(e.contentOffset.x);
+    },
+  });
 
   // Tap-driven page change, handed to the pager's own animated scroll so it
   // runs entirely on the native thread — identical motion to a finger swipe.
@@ -177,7 +223,7 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
       setActiveIndex(target);
       scrollRef.current?.scrollTo({ x: target * winW, y: 0, animated: true });
     },
-    [winW],
+    [scrollRef, winW],
   );
 
   // Pin the opening page once the row has its full width. `contentOffset`
@@ -191,10 +237,11 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
       if (didPlace.current || contentW < SLIDES.length * winW - 1) return;
       didPlace.current = true;
       const x = (initialSignInIndex ? SIGNIN_SLIDE : 0) * winW;
+      scrollX.value = x;
       scrollRef.current?.scrollTo({ x, y: 0, animated: false });
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ x, y: 0, animated: false }));
     },
-    [initialSignInIndex, SIGNIN_SLIDE, winW],
+    [initialSignInIndex, SIGNIN_SLIDE, winW, scrollRef, scrollX],
   );
 
   const goNext = useCallback(() => {
@@ -238,22 +285,11 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
       if (id === '4') return <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={handleTap} />;
       return <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={handleTap} />;
     };
-    return SLIDES.map((item, index) => {
-      // Panoramic transition: the content glides at finger speed over the
-      // shared background (no offset/scale — that read as a separate screen
-      // arriving), with only a gentle fade for depth. The interpolation hangs
-      // off the natively-driven scroll offset, so it costs no JS per frame.
-      const opacity = scrollX.interpolate({
-        inputRange: [(index - 1) * winW, index * winW, (index + 1) * winW],
-        outputRange: [0.45, 1, 0.45],
-        extrapolate: 'clamp',
-      });
-      return (
-        <Animated.View key={item.id} style={{ width: winW, height: winH, opacity }}>
-          {slideFor(item.id)}
-        </Animated.View>
-      );
-    });
+    return SLIDES.map((item, index) => (
+      <Page key={item.id} index={index} width={winW} height={winH} scrollX={scrollX}>
+        {slideFor(item.id)}
+      </Page>
+    ));
   }, [activeIndex, handleTap, winW, winH, scrollX]);
 
   return (
@@ -269,10 +305,7 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: true,
-        })}
-        onMomentumScrollEnd={onMomentumEnd}
+        onScroll={scrollHandler}
         contentOffset={{ x: initialSignInIndex ? SIGNIN_SLIDE * winW : 0, y: 0 }}
         onContentSizeChange={handleContentSize}
         decelerationRate="fast"

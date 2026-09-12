@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Dimensions, Easing, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native';
+import Animated, {
+  Easing,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SvgXml } from 'react-native-svg';
 import {
@@ -19,12 +28,13 @@ import {
 // lone K pops (spring to 2× and back) as two soft glows settle in. All
 // timing/easing/keyframe values below are verbatim from get_motion_context;
 // the whole timeline hangs off one linear 0→1 driver so the cohort stays in
-// sync. Pure vectors — no Lottie frame cache, a few KB total.
+// sync. Pure vectors — no Lottie frame cache, a few KB total. The driver and
+// every derived style are Reanimated worklets on the UI thread.
 
 const BG = '#eaefff'; // Semantic/Accent/muted — the design frame's background
 const DURATION_MS = 2000;
 
-const { width: W, height: H } = Dimensions.get('window');
+const { width: W } = Dimensions.get('window');
 const DESIGN_W = 375;
 const k = W / DESIGN_W; // design px → device dp
 
@@ -42,8 +52,10 @@ const SPRING: number[] = [
   0.9981, 0.9977, 0.9978, 0.9983, 0.9991, 0.9998, 1.0003, 1.0007, 1.0008, 1.0008,
 ];
 
+type Ranges = { inputRange: number[]; outputRange: number[] };
+
 /** Interpolation stops for a spring segment t0→t1 animating from→to. */
-function springStops(t0: number, t1: number, from: number, to: number) {
+function springStops(t0: number, t1: number, from: number, to: number): Ranges {
   const inputRange: number[] = [];
   const outputRange: number[] = [];
   SPRING.forEach((v, i) => {
@@ -112,13 +124,13 @@ const K_TX: Stop[] = [
 ];
 const K_TY: Stop[] = [[0, 9.51], [0.20, 9.788], [0.45, 9.87]];
 
-/** Track stops → interpolate config (values scaled by the device factor).
+/** Track stops → interpolation ranges (values scaled by the device factor).
  *  Normalised to the first stop: Figma's exported translate values are
  *  absolute in the prototype's coordinate space and their 0% value equals the
  *  node's static canvas position — applying them unadjusted double-counts the
  *  base (the K rode ~10px low of the baseline). Subtracting the frame-0 value
  *  makes frame 0 exactly the static layout, per the motion-offset rule. */
-function track(progress: Animated.Value, stops: Stop[], scaleBy = 1) {
+function track(stops: Stop[], scaleBy = 1): Ranges {
   const base = stops[0][1];
   const inputRange = stops.map(([t]) => t);
   const outputRange = stops.map(([, v]) => (v - base) * scaleBy);
@@ -130,7 +142,41 @@ function track(progress: Animated.Value, stops: Stop[], scaleBy = 1) {
     inputRange.push(1);
     outputRange.push(outputRange[outputRange.length - 1]);
   }
-  return progress.interpolate({ inputRange, outputRange });
+  return { inputRange, outputRange };
+}
+
+// Ranges are plain arrays computed once; the worklets below read them.
+const GLOW_SPRING = springStops(0, 0.62649, -60 * k, 0);
+const K_X = track(K_TX, k);
+const K_Y = track(K_TY, k);
+const K_POP = springStops(0.42245, 0.62649, 1, 2);
+// Down-ramp 2→1 follows the design's cubic-bezier(0.5, 0, 0.5, 1).
+const K_SCALE: Ranges = {
+  inputRange: [0, 0.42245, ...K_POP.inputRange.slice(1), 0.6404, 0.6544, 0.6683, 0.68228, 1],
+  outputRange: [1, 1, ...K_POP.outputRange.slice(1), 1.896, 1.5, 1.104, 1, 1],
+};
+const LETTER_TX = LETTERS.map((L) => track(L.tx, k));
+
+/** One wordmark letter: slides along as the K reaches it, then shrinks away. */
+function Letter({ progress, index }: { progress: SharedValue<number>; index: number }) {
+  const L = LETTERS[index];
+  // Only the numbers cross into the worklet, not the SVG source string.
+  const { fadeStart, fadeEnd, shrinkEnd } = L;
+  const tx = LETTER_TX[index];
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, fadeStart, fadeEnd, 1], [1, 1, 0, 0]),
+    transform: [
+      { translateX: interpolate(progress.value, tx.inputRange, tx.outputRange) },
+      { scale: interpolate(progress.value, [0, fadeStart, shrinkEnd, 1], [1, 1, 0.001, 0.001]) },
+    ],
+  }));
+  return (
+    <Animated.View
+      style={[{ position: 'absolute', left: L.box.left * k, top: L.box.top * k, width: L.box.w * k, height: L.box.h * k }, style]}
+    >
+      <SvgXml xml={L.xml} width={L.box.w * k} height={L.box.h * k} />
+    </Animated.View>
+  );
 }
 
 type Props = {
@@ -144,16 +190,16 @@ type Props = {
 export function IntroSplash({ onDone, canFinish = true }: Props) {
   const finished = useRef(false);
   const [animDone, setAnimDone] = useState(false);
-  const progress = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const progress = useSharedValue(0);
+  const opacity = useSharedValue(1);
 
   // Fade out over the (already rendered) app underneath, then unmount.
   const finish = () => {
     if (finished.current) return;
     finished.current = true;
-    Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() =>
-      onDone(),
-    );
+    opacity.value = withTiming(0, { duration: 300 }, (done) => {
+      if (done) runOnJS(onDone)();
+    });
   };
 
   useEffect(() => {
@@ -171,16 +217,13 @@ export function IntroSplash({ onDone, canFinish = true }: Props) {
       .then((reduce) => {
         if (cancelled) return;
         if (reduce) {
-          progress.setValue(1);
+          progress.value = 1;
           setAnimDone(true);
           return;
         }
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: DURATION_MS,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }).start(() => setAnimDone(true));
+        progress.value = withTiming(1, { duration: DURATION_MS, easing: Easing.linear }, (done) => {
+          if (done) runOnJS(setAnimDone)(true);
+        });
       });
     // Failsafe so the user is never stuck on the splash.
     const t = setTimeout(() => setAnimDone(true), DURATION_MS + 1500);
@@ -191,76 +234,48 @@ export function IntroSplash({ onDone, canFinish = true }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const rootStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
   // ── Glows (Ellipse 2101/2102): fade to 0.1 while settling ±60px → 0. ──────
-  const glowSpring = springStops(0, 0.62649, -60 * k, 0);
-  const glowTopY = progress.interpolate(glowSpring);
-  const glowTopOpacity = progress.interpolate({ inputRange: [0, 0.62649, 1], outputRange: [0, 0.1, 0.1] });
-  const glowBotY = progress.interpolate({ inputRange: [0, 0.62649, 1], outputRange: [60 * k, 0, 0] });
-  const glowBotOpacity = progress.interpolate({ inputRange: [0, 0.001, 0.62649, 1], outputRange: [0.1, 0, 0.1, 0.1] });
+  const glowTopStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.62649, 1], [0, 0.1, 0.1]),
+    transform: [{ translateY: interpolate(progress.value, GLOW_SPRING.inputRange, GLOW_SPRING.outputRange) }],
+  }));
+  const glowBotStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.001, 0.62649, 1], [0.1, 0, 0.1, 0.1]),
+    transform: [{ translateY: interpolate(progress.value, [0, 0.62649, 1], [60 * k, 0, 0]) }],
+  }));
 
   // ── K: travels right, then spring-pops 1→2→1. ─────────────────────────────
-  const kX = track(progress, K_TX, k);
-  const kY = track(progress, K_TY, k);
-  const kPop = springStops(0.42245, 0.62649, 1, 2);
-  // Down-ramp 2→1 follows the design's cubic-bezier(0.5, 0, 0.5, 1).
-  const kScale = progress.interpolate({
-    inputRange: [0, 0.42245, ...kPop.inputRange.slice(1), 0.6404, 0.6544, 0.6683, 0.68228, 1],
-    outputRange: [1, 1, ...kPop.outputRange.slice(1), 1.896, 1.5, 1.104, 1, 1],
-  });
+  const kStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(progress.value, K_X.inputRange, K_X.outputRange) },
+      { translateY: interpolate(progress.value, K_Y.inputRange, K_Y.outputRange) },
+      { scale: interpolate(progress.value, K_SCALE.inputRange, K_SCALE.outputRange) },
+    ],
+  }));
 
   return (
-    <Animated.View style={[styles.root, { opacity }]} pointerEvents="none">
+    <Animated.View style={[styles.root, rootStyle]} pointerEvents="none">
       {/* Soft glows above and below (blurred white ellipses in the design). */}
-      <Animated.View
-        style={[styles.glow, { top: -181 * k, opacity: glowTopOpacity, transform: [{ translateY: glowTopY }] }]}
-      >
+      <Animated.View style={[styles.glow, { top: -181 * k }, glowTopStyle]}>
         <SvgXml xml={SPLASH_GLOW_SVG} width={430 * k} height={363 * k} />
       </Animated.View>
-      <Animated.View
-        style={[styles.glow, { top: 570 * k, opacity: glowBotOpacity, transform: [{ translateY: glowBotY }] }]}
-      >
+      <Animated.View style={[styles.glow, { top: 570 * k }, glowBotStyle]}>
         <SvgXml xml={SPLASH_GLOW_SVG} width={430 * k} height={363 * k} />
       </Animated.View>
 
       {/* Wordmark */}
       <Animated.View style={styles.logoBox}>
-        {LETTERS.map((L, i) => (
-          <Animated.View
-            key={i}
-            style={{
-              position: 'absolute',
-              left: L.box.left * k,
-              top: L.box.top * k,
-              width: L.box.w * k,
-              height: L.box.h * k,
-              opacity: progress.interpolate({
-                inputRange: [0, L.fadeStart, L.fadeEnd, 1],
-                outputRange: [1, 1, 0, 0],
-              }),
-              transform: [
-                { translateX: track(progress, L.tx, k) },
-                {
-                  scale: progress.interpolate({
-                    inputRange: [0, L.fadeStart, L.shrinkEnd, 1],
-                    outputRange: [1, 1, 0.001, 0.001],
-                  }),
-                },
-              ],
-            }}
-          >
-            <SvgXml xml={L.xml} width={L.box.w * k} height={L.box.h * k} />
-          </Animated.View>
+        {LETTERS.map((_, i) => (
+          <Letter key={i} progress={progress} index={i} />
         ))}
 
         <Animated.View
-          style={{
-            position: 'absolute',
-            left: K_FRAME.left * k,
-            top: K_FRAME.top * k,
-            width: K_FRAME.w * k,
-            height: K_FRAME.h * k,
-            transform: [{ translateX: kX }, { translateY: kY }, { scale: kScale }],
-          }}
+          style={[
+            { position: 'absolute', left: K_FRAME.left * k, top: K_FRAME.top * k, width: K_FRAME.w * k, height: K_FRAME.h * k },
+            kStyle,
+          ]}
         >
           <SvgXml
             xml={SPLASH_K_SVG}

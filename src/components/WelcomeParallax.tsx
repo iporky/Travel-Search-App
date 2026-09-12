@@ -1,5 +1,6 @@
 import React from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, { Extrapolation, interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { SIGNIN_TOP_CLOUD_SVG, SIGNIN_BOTTOM_CLOUD_SVG } from '../assets/signInAssets';
@@ -9,8 +10,8 @@ import { SIGNIN_TOP_CLOUD_SVG, SIGNIN_BOTTOM_CLOUD_SVG } from '../assets/signInA
 // stack of layers — sun, far hills, clouds, mid hills and near ground — each
 // scrolls at its own fraction of the finger, so the whole scene has depth and
 // keeps moving smoothly across page boundaries. It is all vector, with no
-// baked backgrounds, and every transform runs on the native driver straight
-// off the pager's scroll offset.
+// baked backgrounds, and every transform is a Reanimated worklet reading the
+// pager's scroll offset directly on the UI thread.
 
 const DESIGN_W = 375;
 const DESIGN_H = 812;
@@ -50,18 +51,40 @@ function hillPath(width: number, height: number, baseline: number, amp: number, 
 }
 
 type Props = {
-  scrollX: Animated.Value;
+  scrollX: SharedValue<number>;
   pageWidth: number;
   pageHeight: number;
   pages: number;
 };
+
+/** One page's sky gradient, at full strength on its page and gone a page away. */
+function Sky({ scrollX, index, pageWidth, colors }: { scrollX: SharedValue<number>; index: number; pageWidth: number; colors: readonly [string, string] }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollX.value,
+      [(index - 1) * pageWidth, index * pageWidth, (index + 1) * pageWidth],
+      [0, 1, 0],
+      Extrapolation.CLAMP,
+    ),
+  }));
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, style]}>
+      <LinearGradient colors={[colors[0], colors[1]]} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
+    </Animated.View>
+  );
+}
+
+/** A full-height strip that slides at `rate` × the scroll offset. */
+function Layer({ scrollX, rate, width, children }: { scrollX: SharedValue<number>; rate: number; width: number; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: -scrollX.value * rate }] }));
+  return <Animated.View style={[styles.layer, { width }, style]}>{children}</Animated.View>;
+}
 
 export function WelcomeParallax({ scrollX, pageWidth: W, pageHeight: H, pages }: Props) {
   const sx = (n: number) => (n * W) / DESIGN_W;
   const sy = (n: number) => (n * H) / DESIGN_H;
   const travel = (pages - 1) * W; // total scroll distance
   const layerW = (rate: number) => W + travel * rate + sx(60);
-  const shift = (rate: number) => Animated.multiply(scrollX, -rate);
 
   const groundH = sy(190);
   const midH = sy(260);
@@ -71,25 +94,11 @@ export function WelcomeParallax({ scrollX, pageWidth: W, pageHeight: H, pages }:
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Sky: cross-fading page gradients (always sum to a full cover). */}
       {SKY.map((g, i) => (
-        <Animated.View
-          key={i}
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              opacity: scrollX.interpolate({
-                inputRange: [(i - 1) * W, i * W, (i + 1) * W],
-                outputRange: [0, 1, 0],
-                extrapolate: 'clamp',
-              }),
-            },
-          ]}
-        >
-          <LinearGradient colors={[g[0], g[1]]} style={StyleSheet.absoluteFill} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} />
-        </Animated.View>
+        <Sky key={i} scrollX={scrollX} index={i} pageWidth={W} colors={g} />
       ))}
 
       {/* Sun — a warm soft disc that barely moves. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.sun), transform: [{ translateX: shift(RATE.sun) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.sun} width={layerW(RATE.sun)}>
         <Svg width={sx(300)} height={sx(300)} style={{ position: 'absolute', left: sx(190), top: sy(40) }}>
           <Defs>
             <RadialGradient id="wpSun" cx="50%" cy="50%" rx="50%" ry="50%">
@@ -100,17 +109,17 @@ export function WelcomeParallax({ scrollX, pageWidth: W, pageHeight: H, pages }:
           </Defs>
           <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#wpSun)" />
         </Svg>
-      </Animated.View>
+      </Layer>
 
       {/* Far hills. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.farHills), transform: [{ translateX: shift(RATE.farHills) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.farHills} width={layerW(RATE.farHills)}>
         <Svg width={layerW(RATE.farHills)} height={farH} style={{ position: 'absolute', left: 0, top: H - farH }}>
           <Path d={hillPath(layerW(RATE.farHills), farH, farH * 0.42, farH * 0.16, 4.2, 0.6)} fill="#e6eefc" />
         </Svg>
-      </Animated.View>
+      </Layer>
 
       {/* Far clouds. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.farClouds), transform: [{ translateX: shift(RATE.farClouds) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.farClouds} width={layerW(RATE.farClouds)}>
         {[
           { x: 40, y: 96, w: 96, o: 0.2 },
           { x: 300, y: 210, w: 120, o: 0.16 },
@@ -121,16 +130,17 @@ export function WelcomeParallax({ scrollX, pageWidth: W, pageHeight: H, pages }:
             <SvgXml xml={SIGNIN_TOP_CLOUD_SVG} width={sx(c.w)} height={sx(c.w * 0.85)} />
           </View>
         ))}
-      </Animated.View>
+      </Layer>
 
       {/* Mid hills. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.midHills), transform: [{ translateX: shift(RATE.midHills) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.midHills} width={layerW(RATE.midHills)}>
         <Svg width={layerW(RATE.midHills)} height={midH} style={{ position: 'absolute', left: 0, top: H - midH }}>
           <Path d={hillPath(layerW(RATE.midHills), midH, midH * 0.5, midH * 0.2, 5.5, 2.1)} fill="#dae6fb" />
         </Svg>
-      </Animated.View>
+      </Layer>
+
       {/* Near clouds. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.nearClouds), transform: [{ translateX: shift(RATE.nearClouds) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.nearClouds} width={layerW(RATE.nearClouds)}>
         {[
           { x: 90, y: 140, w: 150, o: 0.4, top: true },
           { x: 420, y: 300, w: 210, o: 0.24, top: false },
@@ -143,15 +153,14 @@ export function WelcomeParallax({ scrollX, pageWidth: W, pageHeight: H, pages }:
             <SvgXml xml={c.top ? SIGNIN_TOP_CLOUD_SVG : SIGNIN_BOTTOM_CLOUD_SVG} width={sx(c.w)} height={sx(c.w * (c.top ? 0.85 : 0.67))} />
           </View>
         ))}
-      </Animated.View>
+      </Layer>
 
       {/* Near ground — low, soft, under the text. */}
-      <Animated.View style={[styles.layer, { width: layerW(RATE.ground), transform: [{ translateX: shift(RATE.ground) }] }]}>
+      <Layer scrollX={scrollX} rate={RATE.ground} width={layerW(RATE.ground)}>
         <Svg width={layerW(RATE.ground)} height={groundH} style={{ position: 'absolute', left: 0, top: H - groundH }}>
           <Path d={hillPath(layerW(RATE.ground), groundH, groundH * 0.55, groundH * 0.18, 6.5, 4.0)} fill="#cddff9" />
         </Svg>
-      </Animated.View>
-
+      </Layer>
     </View>
   );
 }

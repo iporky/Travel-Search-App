@@ -204,6 +204,12 @@ const ko = {
     noResultsTitle: '일치하는 결과가 없어요',
     noResultsBody: '다른 키워드로 검색해 보세요',
     loadError: '기록을 불러오지 못했어요.',
+    untitled: '새 대화',
+    questionCount: '질문 {{count}}개',
+    conversationLoadError: '이 대화를 불러오지 못했어요.',
+    noAnswer: '이 질문에 대한 답변이 저장되지 않았어요.',
+    earlierMessagesHidden: '이 대화의 이전 메시지는 표시되지 않아요.',
+    unavailable: '지금은 대화 기록을 이용할 수 없어요.',
     resultsCount: '결과 {{count}}개',
     for: '·',
     noResults: '결과가 없습니다.',
@@ -472,6 +478,14 @@ const ko = {
     askPlaceholder: '무엇이든 물어보세요',
     askPlaceholderExpanded: '무엇이든 물어보세요!',
     trendingSearches: '인기 검색어',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "이렇게 검색해 보세요",
+      noResultsTitle: "일치하는 결과가 없어요",
+      noResultsBody: "다른 키워드로 검색해 보세요",
+      errorTitle: "추천 검색어를 불러올 수 없어요",
+      errorBody: "입력한 키워드로 계속 검색할 수 있어요",
+    },
     suggestions: {
       visa: '한국 비자 신청 방법',
       chicken: '근처 한국식 치킨 맛집',
@@ -541,6 +555,8 @@ const ko = {
     sources: '출처',
     related: '관련 질문',
     error: '문제가 발생했습니다. 다시 시도해 주세요.',
+    interpretedAs: '이렇게 이해했어요',
+    searchAsTyped: '입력한 그대로 검색',
   },
   signIn: {
     line1: '한국 여행을',

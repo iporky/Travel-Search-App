@@ -1,8 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
-  Image,
   ImageSourcePropType,
   ImageStyle,
   StyleProp,
@@ -10,6 +8,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/tokens';
 
@@ -41,7 +40,9 @@ export function LoadingImage({
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [spinnerVisible, setSpinnerVisible] = useState(false);
-  const opacity = useRef(new Animated.Value(0)).current;
+  // Fade-in runs on the UI thread once the bitmap has decoded.
+  const opacity = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   useEffect(() => {
     if (loaded || failed || !showSpinner) return;
@@ -52,11 +53,7 @@ export function LoadingImage({
   const handleLoad = () => {
     setLoaded(true);
     setSpinnerVisible(false);
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
+    opacity.value = withTiming(1, { duration: 220 });
   };
 
   return (
@@ -80,7 +77,7 @@ export function LoadingImage({
             setFailed(true);
             setSpinnerVisible(false);
           }}
-          style={[StyleSheet.absoluteFill, { opacity }, imageStyle]}
+          style={[StyleSheet.absoluteFill, fadeStyle, imageStyle]}
         />
       )}
     </View>

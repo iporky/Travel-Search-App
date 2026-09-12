@@ -3,9 +3,7 @@ import {
   ActivityIndicator,
   AppState,
   Alert,
-  Animated,
   Dimensions,
-  Easing,
   GestureResponderEvent,
   Image,
   ImageSourcePropType,
@@ -19,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -96,7 +95,8 @@ export function SignIn({ onPress, active }: Props) {
   // so the user never stares at a frozen sign-in page.
   const [authLoading, setAuthLoading] = useState(false);
   const [policy, setPolicy] = useState<'terms' | 'privacy' | null>(null);
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fadeAnim.value }));
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export function SignIn({ onPress, active }: Props) {
 
   useEffect(() => {
     if (!active) return;
-    Animated.timing(fadeAnim, { toValue: 1, duration: 1200, useNativeDriver: true, easing: Easing.out(Easing.ease) }).start();
+    fadeAnim.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.ease) });
   }, [active]);
 
   // Only spin the frame sequence while this page is the one on screen, and
@@ -191,7 +191,7 @@ export function SignIn({ onPress, active }: Props) {
           />
         </View>
 
-        <Animated.View style={[styles.textColumn, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.textColumn, fadeStyle]}>
           <View style={styles.headerText}>
             {/* Long translations shrink uniformly to fit each line. */}
             <AutoFitTitle maxWidth={W - sx(48)}>
@@ -213,7 +213,7 @@ export function SignIn({ onPress, active }: Props) {
       </Pressable>
 
       {/* Social sign-in + terms, anchored to the bottom of the screen. */}
-      <Animated.View style={[styles.bottomGroup, { bottom: insets.bottom + sy(20), opacity: fadeAnim }]}>
+      <Animated.View style={[styles.bottomGroup, { bottom: insets.bottom + sy(20) }, fadeStyle]}>
         <View style={styles.socialRow}>
           {Platform.OS === 'ios' ? (
             <TouchableOpacity onPress={handleApplePress} activeOpacity={0.85}>

@@ -204,6 +204,12 @@ const en = {
     noResultsTitle: 'No matching results',
     noResultsBody: 'Try a different keyword',
     loadError: "Couldn't load your history.",
+    untitled: 'New conversation',
+    questionCount: '{{count}} questions',
+    conversationLoadError: 'Couldn\'t load this conversation.',
+    noAnswer: 'No answer was recorded for this question.',
+    earlierMessagesHidden: 'Earlier messages in this conversation aren\'t shown.',
+    unavailable: 'Conversation history isn\'t available right now.',
     resultsCount: '{{count}} results',
     for: 'for',
     noResults: 'No results found.',
@@ -476,6 +482,14 @@ const en = {
     askPlaceholder: 'Ask me anything',
     askPlaceholderExpanded: 'Ask me anything!',
     trendingSearches: 'Trending Searches',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "Try Searching",
+      noResultsTitle: "No matching results",
+      noResultsBody: "Try a different keyword",
+      errorTitle: "Suggestions unavailable",
+      errorBody: "You can still search with your keyword",
+    },
     suggestions: {
       visa: 'Apply for a Korean visa',
       chicken: 'Korean fried chicken nearby',
@@ -545,6 +559,8 @@ const en = {
     sources: 'Sources',
     related: 'Related questions',
     error: 'Something went wrong. Please try again.',
+    interpretedAs: 'Interpreted as',
+    searchAsTyped: 'Search as typed',
   },
   signIn: {
     line1: "Let's get you",

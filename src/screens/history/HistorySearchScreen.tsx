@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import Animated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { colors, spacing } from '../../theme/tokens';
 import {
   DEFAULT_HISTORY_FILTERS,
@@ -18,32 +19,48 @@ import {
   HistoryFilters,
   HistorySort,
   HistoryTimeRange,
-  SearchHistoryItem,
 } from '../../types/history';
+import { ConversationSummary } from '../../types/conversation';
 import { DropdownFilter } from '../../components/history/FilterChips';
-import { HistoryRow, emojiForQuery } from '../../components/history/HistoryRow';
+import { ConversationRow, OPEN_MS } from '../../components/history/ConversationRow';
 import { HistoryEmptyState } from '../../components/history/HistoryEmptyState';
 import { KeyboardStickyView } from '../../components/KeyboardStickyView';
 import { useLanguage } from '../../context/LanguageContext';
-import { applyRecentlyViewed, useHistorySections, useSearchHistory } from '../../hooks/useSearchHistory';
+import { applyRecentlyViewed, useHistorySections, useConversations } from '../../hooks/useConversations';
 import { ViewedMap } from '../../utils/historyViewed';
 
 // Figma History_SearchResult (12354:55449 / 12354:55525): back arrow +
 // search field (Onboarding/Input/Field), "245 results for "E7 Visa"" line,
 // the same two filter chips, then results grouped by DAY ("August 1") as
-// `Suggestion Chip/L` accordion rows — tapping expands the stored answer in
-// place (no navigation). Zero matches → alert icon + "No matching results".
-// The keyword is matched server-side (GET /history/search?q=).
+// `Suggestion Chip/L` accordion rows — tapping expands the thread's chat
+// transcript in place (no navigation). Zero matches → alert icon + "No
+// matching results". The conversations API has no keyword search, so the
+// keyword is matched against thread titles on the client.
 
 type Props = {
   /** Local "recently viewed" ledger (for that sort option). */
   viewed: ViewedMap;
   onBack: () => void;
   /** Called when a row is expanded (feeds the Recently Viewed ledger). */
-  onViewed: (item: SearchHistoryItem) => void;
+  onViewed: (item: ConversationSummary) => void;
+  /** A follow-up chip was tapped: ask it in that thread on the Home tab. */
+  onAskFollowup: (question: string, conversationId: string) => void;
 };
 
-export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
+/** Same eased cell frames as the main list (see HistoryScreen). */
+const AnimatedCell = React.forwardRef<Animated.View, any>(function AnimatedCell(props, ref) {
+  return (
+    <Animated.View
+      {...props}
+      ref={ref}
+      style={[props.style, cellStyles.clip]}
+      layout={LinearTransition.duration(OPEN_MS).easing(Easing.out(Easing.cubic))}
+    />
+  );
+});
+const cellStyles = StyleSheet.create({ clip: { overflow: 'hidden' } });
+
+export function HistorySearchScreen({ viewed, onBack, onViewed, onAskFollowup }: Props) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const [query, setQuery] = useState('');
@@ -51,18 +68,21 @@ export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const toggleItem = (item: SearchHistoryItem) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(item.id)) {
-        next.delete(item.id);
-      } else {
-        next.add(item.id);
-        onViewed(item);
-      }
-      return next;
-    });
-  };
+  const toggleItem = useCallback(
+    (item: ConversationSummary) => {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(item.conversation_id)) {
+          next.delete(item.conversation_id);
+        } else {
+          next.add(item.conversation_id);
+          onViewed(item);
+        }
+        return next;
+      });
+    },
+    [onViewed],
+  );
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(query.trim()), 300);
@@ -70,7 +90,7 @@ export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
   }, [query]);
 
   const hasQuery = debounced.length > 0;
-  const history = useSearchHistory({ filters, queryText: debounced, enabled: hasQuery });
+  const history = useConversations({ filters, queryText: debounced, enabled: hasQuery });
   const ordered = filters.sort === 'recentlyViewed' ? applyRecentlyViewed(history.items, viewed) : history.items;
   const sections = useHistorySections(ordered, 'day', language.voiceLocale);
 
@@ -135,7 +155,8 @@ export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.conversation_id}
+          CellRendererComponent={AnimatedCell}
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -149,11 +170,11 @@ export function HistorySearchScreen({ viewed, onBack, onViewed }: Props) {
             </Text>
           )}
           renderItem={({ item }) => (
-            <HistoryRow
+            <ConversationRow
               item={item}
-              emoji={emojiForQuery(item.user_query, item.category)}
-              expanded={expandedIds.has(item.id)}
-              onToggle={() => toggleItem(item)}
+              expanded={expandedIds.has(item.conversation_id)}
+              onToggle={toggleItem}
+              onAskFollowup={onAskFollowup}
             />
           )}
           onEndReached={history.loadMore}

@@ -159,6 +159,7 @@ export async function recordSearchResponse(args: {
   }
 
   const data = (await res.json()) as TrackingEventResponse;
+  console.log('[api] search recorded → search_query_response_id', data.search_query_response_id ?? null);
   return data.search_query_response_id ?? null;
 }
 

@@ -204,6 +204,12 @@ const fr = {
     noResultsTitle: 'Aucun résultat correspondant',
     noResultsBody: 'Essayez un autre mot-clé',
     loadError: 'Impossible de charger votre historique.',
+    untitled: 'Nouvelle conversation',
+    questionCount: '{{count}} questions',
+    conversationLoadError: 'Impossible de charger cette conversation.',
+    noAnswer: 'Aucune réponse n\'a été enregistrée pour cette question.',
+    earlierMessagesHidden: 'Les messages précédents de cette conversation ne sont pas affichés.',
+    unavailable: 'L\'historique des conversations n\'est pas disponible pour le moment.',
     resultsCount: '{{count}} résultats',
     for: 'pour',
     noResults: 'Aucun résultat.',
@@ -472,6 +478,14 @@ const fr = {
     askPlaceholder: 'Demandez-moi ce que vous voulez',
     askPlaceholderExpanded: 'Demandez-moi ce que vous voulez !',
     trendingSearches: 'Recherches tendance',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "Essayez de chercher",
+      noResultsTitle: "Aucun résultat correspondant",
+      noResultsBody: "Essayez un autre mot-clé",
+      errorTitle: "Suggestions indisponibles",
+      errorBody: "Vous pouvez quand même chercher avec votre mot-clé",
+    },
     suggestions: {
       visa: 'Demander un visa coréen',
       chicken: 'Poulet frit coréen à proximité',
@@ -541,6 +555,8 @@ const fr = {
     sources: 'Sources',
     related: 'Questions connexes',
     error: 'Une erreur est survenue. Veuillez réessayer.',
+    interpretedAs: 'Interprété comme',
+    searchAsTyped: 'Rechercher tel quel',
   },
   signIn: {
     line1: 'On vous aide à',

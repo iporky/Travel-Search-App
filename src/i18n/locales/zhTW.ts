@@ -204,6 +204,12 @@ const zhTW = {
     noResultsTitle: '沒有符合的結果',
     noResultsBody: '試試其他關鍵字',
     loadError: '無法載入你的歷史紀錄。',
+    untitled: '新對話',
+    questionCount: '{{count}} 個問題',
+    conversationLoadError: '無法載入此對話。',
+    noAnswer: '此問題沒有記錄到回答。',
+    earlierMessagesHidden: '此對話的更早訊息未顯示。',
+    unavailable: '對話記錄目前無法使用。',
     resultsCount: '{{count}} 筆結果',
     for: '·',
     noResults: '找不到結果。',
@@ -472,6 +478,14 @@ const zhTW = {
     askPlaceholder: '問我任何問題',
     askPlaceholderExpanded: '問我任何問題！',
     trendingSearches: '熱門搜尋',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "試試搜尋",
+      noResultsTitle: "沒有相符的結果",
+      noResultsBody: "請嘗試其他關鍵字",
+      errorTitle: "暫時無法提供建議",
+      errorBody: "您仍可以用輸入的關鍵字搜尋",
+    },
     suggestions: {
       visa: '申請韓國簽證',
       chicken: '附近的韓式炸雞',
@@ -541,6 +555,8 @@ const zhTW = {
     sources: '來源',
     related: '相關問題',
     error: '出了點問題，請重試。',
+    interpretedAs: '理解為',
+    searchAsTyped: '按原文搜尋',
   },
   signIn: {
     line1: '讓我們帶你',

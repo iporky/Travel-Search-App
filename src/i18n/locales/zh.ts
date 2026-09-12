@@ -204,6 +204,12 @@ const zh = {
     noResultsTitle: '没有匹配的结果',
     noResultsBody: '试试其他关键词',
     loadError: '无法加载你的历史记录。',
+    untitled: '新对话',
+    questionCount: '{{count}} 个问题',
+    conversationLoadError: '无法加载此对话。',
+    noAnswer: '此问题没有记录到回答。',
+    earlierMessagesHidden: '此对话的更早消息未显示。',
+    unavailable: '对话记录暂时不可用。',
     resultsCount: '{{count}} 条结果',
     for: '·',
     noResults: '未找到结果。',
@@ -472,6 +478,14 @@ const zh = {
     askPlaceholder: '问我任何问题',
     askPlaceholderExpanded: '问我任何问题！',
     trendingSearches: '热门搜索',
+    // Search-sheet autocomplete states (Figma 12900:60306).
+    autocomplete: {
+      trySearching: "试试搜索",
+      noResultsTitle: "没有匹配的结果",
+      noResultsBody: "请尝试其他关键词",
+      errorTitle: "暂时无法提供建议",
+      errorBody: "您仍可以用输入的关键词搜索",
+    },
     suggestions: {
       visa: '申请韩国签证',
       chicken: '附近的韩式炸鸡',
@@ -541,6 +555,8 @@ const zh = {
     sources: '来源',
     related: '相关问题',
     error: '出了点问题，请重试。',
+    interpretedAs: '理解为',
+    searchAsTyped: '按原文搜索',
   },
   signIn: {
     line1: '让我们带你',

@@ -19,15 +19,16 @@ import {
   HistoryFilters,
   HistorySort,
   HistoryTimeRange,
-  SearchHistoryItem,
 } from '../types/history';
+import { ConversationSummary } from '../types/conversation';
 import { DropdownFilter } from '../components/history/FilterChips';
-import { HistoryRow, emojiForQuery } from '../components/history/HistoryRow';
+import { ConversationRow, OPEN_MS } from '../components/history/ConversationRow';
 import { HistoryEmptyState } from '../components/history/HistoryEmptyState';
 import { HistorySearchScreen } from './history/HistorySearchScreen';
 import { ScreenTransition } from '../components/ScreenTransition';
+import Animated, { Easing, LinearTransition } from 'react-native-reanimated';
 import { useLanguage } from '../context/LanguageContext';
-import { applyRecentlyViewed, useHistorySections, useSearchHistory } from '../hooks/useSearchHistory';
+import { applyRecentlyViewed, useHistorySections, useConversations } from '../hooks/useConversations';
 import { loadViewed, markViewed, ViewedMap } from '../utils/historyViewed';
 import { track } from '../api/tracking';
 
@@ -38,25 +39,44 @@ import { track } from '../api/tracking';
 //     list refreshes on pick.
 //   • Rows grouped by month ("August"), each a `Suggestion Chip/L` ACCORDION
 //     (History_Expanded 12354:55779): tapping does NOT navigate — it expands
-//     in place and shows the answer/category/sources the History API stored.
+//     in place. Each row is now a Search v2 CONVERSATION; expanded, it shows
+//     every question and answer of that thread as a chat transcript.
 //   • Empty: bird + "Nothing here?" (no history at all) vs alert icon +
 //     "No matching results" (filters return 0).
-// Data: GET /api/v1/history/search (token-scoped, Confluence contract 46268418).
+// Data: GET /api/v2/conversations (+ /{id} on expand), token-scoped
+// (Confluence "API Contract: Search v2", page 68288514).
 
 type Props = {
   /** Reports when a full-screen sub-view (search) is open so the app hides the tab bar. */
   onFullScreen?: (full: boolean) => void;
+  /** A follow-up chip in a transcript was tapped: run it on the Home tab
+      inside that conversation. */
+  onAskFollowup: (question: string, conversationId: string) => void;
 };
 
 type Mode = { kind: 'list' } | { kind: 'search' };
 
-export function HistoryScreen({ onFullScreen }: Props) {
+/** Cell whose frame changes animate (see the SectionList below). Clips so a
+    growing or shrinking card reveals or hides its transcript along its edge. */
+const AnimatedCell = React.forwardRef<Animated.View, any>(function AnimatedCell(props, ref) {
+  return (
+    <Animated.View
+      {...props}
+      ref={ref}
+      style={[props.style, cellStyles.clip]}
+      layout={LinearTransition.duration(OPEN_MS).easing(Easing.out(Easing.cubic))}
+    />
+  );
+});
+const cellStyles = StyleSheet.create({ clip: { overflow: 'hidden' } });
+
+export function HistoryScreen({ onFullScreen, onAskFollowup }: Props) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_HISTORY_FILTERS);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [viewed, setViewed] = useState<ViewedMap>({});
-  // Which rows are expanded (accordion; several can be open at once, as in
+  // Which threads are expanded (accordion; several can be open at once, as in
   // the History_Expanded frame).
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const viewedRef = useRef(viewed);
@@ -77,27 +97,27 @@ export function HistoryScreen({ onFullScreen }: Props) {
     return () => sub.remove();
   }, [mode.kind]);
 
-  const history = useSearchHistory({ filters });
+  const history = useConversations({ filters });
   const ordered = filters.sort === 'recentlyViewed' ? applyRecentlyViewed(history.items, viewed) : history.items;
   // Month-wise sections ("Aug") regardless of the range filter — the per-day
   // "MMM D" grouping for short ranges is parked for now (product call).
   const sections = useHistorySections(ordered, 'month', language.voiceLocale);
 
-  // Expanding counts as "viewing" the row: it feeds the Recently Viewed sort
-  // AND logs the contract's view_search event (source_id = the history row id).
-  const noteViewed = useCallback((item: SearchHistoryItem) => {
-    track.viewSearch(item.id);
-    markViewed(item.id, viewedRef.current).then(setViewed);
+  // Expanding counts as "viewing" the thread: it feeds the Recently Viewed
+  // sort AND logs the contract's view_search event (source_id = the thread id).
+  const noteViewed = useCallback((item: ConversationSummary) => {
+    track.viewSearch(item.conversation_id);
+    markViewed(item.conversation_id, viewedRef.current).then(setViewed);
   }, []);
 
   const toggleItem = useCallback(
-    (item: SearchHistoryItem) => {
+    (item: ConversationSummary) => {
       setExpandedIds((prev) => {
         const next = new Set(prev);
-        if (next.has(item.id)) {
-          next.delete(item.id);
+        if (next.has(item.conversation_id)) {
+          next.delete(item.conversation_id);
         } else {
-          next.add(item.id);
+          next.add(item.conversation_id);
           noteViewed(item);
         }
         return next;
@@ -117,6 +137,7 @@ export function HistoryScreen({ onFullScreen }: Props) {
           viewed={viewed}
           onBack={() => setMode({ kind: 'list' })}
           onViewed={noteViewed}
+          onAskFollowup={onAskFollowup}
         />
       </ScreenTransition>
     );
@@ -152,6 +173,12 @@ export function HistoryScreen({ onFullScreen }: Props) {
         <View style={styles.center}>
           <ActivityIndicator color={colors.blue[500]} />
         </View>
+      ) : history.disabled ? (
+        // The server has the conversations feature switched off — nothing to
+        // retry, so say so instead of looping on an error.
+        <View style={styles.center}>
+          <Text style={styles.muted}>{t('history.unavailable')}</Text>
+        </View>
       ) : history.error && history.items.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.muted}>{t('history.loadError')}</Text>
@@ -162,7 +189,11 @@ export function HistoryScreen({ onFullScreen }: Props) {
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.conversation_id}
+          // Each list cell eases to its new frame when a thread expands or
+          // collapses (and the rows beneath slide along) — a native frame
+          // animation, so it stays smooth while the transcript is heavy.
+          CellRendererComponent={AnimatedCell}
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.list}
@@ -178,11 +209,11 @@ export function HistoryScreen({ onFullScreen }: Props) {
             </Text>
           )}
           renderItem={({ item }) => (
-            <HistoryRow
+            <ConversationRow
               item={item}
-              emoji={emojiForQuery(item.user_query, item.category)}
-              expanded={expandedIds.has(item.id)}
-              onToggle={() => toggleItem(item)}
+              expanded={expandedIds.has(item.conversation_id)}
+              onToggle={toggleItem}
+              onAskFollowup={onAskFollowup}
             />
           )}
           refreshControl={

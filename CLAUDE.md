@@ -1,7 +1,7 @@
 # Konnect App — Claude Instructions
 
 ## Project Overview
-React Native / Expo app (~54) targeting Android (arm64-v8a) and iOS. Korea travel companion for foreigners. Firebase auth (Google + Apple + Facebook via generic OAuth provider). Search is LIVE: `POST https://dev.konnect.kr/query/stream` (streaming NDJSON, see `src/api/search.ts`); other backend calls are still mocked (`USE_MOCKS = true` in `src/config/index.ts`).
+React Native / Expo app (~54) targeting Android (arm64-v8a) and iOS. Korea travel companion for foreigners. Firebase auth (Google + Apple + Facebook via generic OAuth provider). Search is LIVE on Search v2: `POST {API_HOST}/api/v2/search` (streaming NDJSON, see `src/api/search.ts`) plus `/api/v2/conversations` for the History tab (`src/api/conversations.ts`). `API_HOST` lives in `src/config/index.ts` — **staging** (`https://staging.konnect.kr`) by default for local builds since 2026-09-12, overridable per build with `EXPO_PUBLIC_API_HOST`; the other backend calls (users/community/content) are still mocked (`USE_MOCKS = true`).
 
 ## After Every Code Change — Build, Copy to release/, Install
 

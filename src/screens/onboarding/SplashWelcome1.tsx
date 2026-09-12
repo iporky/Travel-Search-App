@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   GestureResponderEvent,
   Pressable,
@@ -8,23 +7,24 @@ import {
   Text,
   View,
 } from 'react-native';
+import Animated, { Extrapolation, interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import LottieView from 'lottie-react-native';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
 
-// Designer's Kiki in two parts, both 640x464 transparent-WebP on the same
-// 26fps timeline, so they sit straight on the shared panorama with no
-// background to blend away. She flies in, lands and waves; then she stands and
-// blinks. The two are cut to butt together exactly: the blink loop's frame 0
-// is byte-identical to the arrival's closing frame, so the switch is a
-// straight cut on the same image — no cross-fade, nothing to smear. The blink
-// loop also opens and closes on the same pose, so it wraps invisibly too.
-const KIKI_ARRIVAL = require('../../../assets/lottie/welcome-bird-full.json');
-const KIKI_BLINK = require('../../../assets/lottie/welcome-blink-loop.json');
+// Designer's two-part Kiki: she runs in from the distance once, then waves
+// forever. Both are 720x720 transparent-WebP frame sequences, so they sit
+// straight on the shared panorama with no background to blend away. The
+// exports are cut to run together — the walk-in's closing pose is the loop's
+// closing frame, so starting the loop at frame 0 picks up exactly where the
+// walk-in stopped.
+const WALK_IN = require('../../../assets/lottie/welcome-walk-in.json');
+const WAVE_LOOP = require('../../../assets/lottie/welcome-wave-loop.json');
 
-// The arrival plays at the export's own tempo; the blink runs a touch quicker.
-const ARRIVAL_SPEED = 1;
-const BLINK_SPEED = 1.25;
+// The run plays at the export's own tempo; the wave eases back once she has
+// arrived.
+const WALK_SPEED = 1;
+const LOOP_SPEED = 0.7;
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -41,71 +41,75 @@ interface Props {
   /** true while this slide is the visible page */
   active?: boolean;
   /** Pager scroll offset — gives the mascot a touch of parallax depth. */
-  scrollX?: Animated.Value;
+  scrollX?: SharedValue<number>;
   pageWidth?: number;
 }
 
 export function SplashWelcome1({ onPress, active = true, scrollX, pageWidth }: Props) {
   const { t } = useTranslation();
-  // The blink loop sits mounted underneath from the start, parked on its frame
-  // 0 — which is the arrival's closing frame — so it is already drawn when the
-  // switch happens and no frame can flash through.
-  const blinkRef = useRef<LottieView>(null);
-  const [blinking, setBlinking] = useState(false);
-  // Bumped every time the slide comes back into view, so she flies in again
-  // rather than resuming mid-blink.
+  // The wave sits mounted underneath from the start, parked on frame 0 — the
+  // frame after the walk-in's last — so it is already drawn when the switch
+  // happens. The hand-over is a straight cut: cross-fading would blend two
+  // different poses and smear it.
+  const [introDone, setIntroDone] = useState(false);
+  const loopRef = useRef<LottieView>(null);
+  // Bumped every time the slide comes back into view, which remounts the
+  // walk-in so she runs in again rather than resuming mid-wave.
   const [run, setRun] = useState(0);
   const wasActive = useRef(active);
   useEffect(() => {
     if (active && !wasActive.current) {
-      blinkRef.current?.reset(); // park the blink back on frame 0
-      setBlinking(false);
+      loopRef.current?.reset(); // park the wave back on frame 0
+      setIntroDone(false);
       setRun((r) => r + 1);
     }
     wasActive.current = active;
   }, [active]);
 
-  // One commit: the blink becomes visible and the arrival goes away together,
+  // One commit: the wave becomes visible and the walk-in goes away together,
   // so no frame is ever drawn without one of them on screen.
-  const handleArrivalEnd = () => {
-    blinkRef.current?.play();
-    setBlinking(true);
+  const handleIntroEnd = () => {
+    loopRef.current?.play();
+    setIntroDone(true);
   };
-  // Hero sits a little "deeper" than the text: it lags the drag by 15%.
-  const depthX =
-    scrollX && pageWidth
-      ? scrollX.interpolate({ inputRange: [0, pageWidth], outputRange: [0, pageWidth * 0.15], extrapolate: 'clamp' })
-      : 0;
+
+  // Hero sits a little "deeper" than the text: it lags the drag by 15%. A
+  // worklet on the pager's scroll offset, so it tracks the finger on the UI
+  // thread.
+  const depthStyle = useAnimatedStyle(() => {
+    if (!scrollX || !pageWidth) return { transform: [{ translateX: 0 }] };
+    return {
+      transform: [
+        { translateX: interpolate(scrollX.value, [0, pageWidth], [0, pageWidth * 0.15], Extrapolation.CLAMP) },
+      ],
+    };
+  });
 
   return (
     <Pressable onPress={onPress} style={styles.root}>
-      {/* Kiki flies in, lands, waves, then stands and blinks — the only bird
-          on this slide. The pager's scroll adds a touch of depth as it
-          leaves. */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.lottieWrap, { transform: [{ translateX: depthX }] }]}
-      >
-        <View style={[styles.stack, { opacity: blinking ? 1 : 0 }]}>
+      {/* Kiki runs in, then keeps waving — the only bird on this slide. The
+          pager's scroll adds a touch of depth as it leaves. */}
+      <Animated.View pointerEvents="none" style={[styles.lottieWrap, depthStyle]}>
+        <View style={[styles.stack, { opacity: introDone ? 1 : 0 }]}>
           <LottieView
-            ref={blinkRef}
-            source={KIKI_BLINK}
+            ref={loopRef}
+            source={WAVE_LOOP}
             autoPlay={false}
             loop
-            speed={BLINK_SPEED}
+            speed={LOOP_SPEED}
             style={styles.lottie}
             resizeMode="contain"
           />
         </View>
-        {!blinking ? (
+        {!introDone ? (
           <View style={styles.stack}>
             <LottieView
               key={run}
-              source={KIKI_ARRIVAL}
+              source={WALK_IN}
               autoPlay
               loop={false}
-              speed={ARRIVAL_SPEED}
-              onAnimationFinish={handleArrivalEnd}
+              speed={WALK_SPEED}
+              onAnimationFinish={handleIntroEnd}
               style={styles.lottie}
               resizeMode="contain"
             />
@@ -134,16 +138,17 @@ export function SplashWelcome1({ onPress, active = true, scrollX, pageWidth }: P
 const styles = StyleSheet.create({
   // Transparent — the pager paints one shared panoramic background.
   root: { width: '100%', height: '100%', overflow: 'hidden' },
-  // The design window is 250×250 at y≈261 (SignUp_Welcome 12320:52202). The
-  // box takes the animation's own 640×464 aspect and is scaled so Kiki lands
-  // at the same on-screen size as before; she sits at 55% of the canvas
-  // height, which sets the top offset that holds the design's centre point.
+  // The design window is 250×250 at y≈261 (SignUp_Welcome 12320:52202); Kiki
+  // fills only part of her 720×720 canvas, so the box is scaled up to render
+  // her at the size the layout expects — measured on device against the hero
+  // she replaces. Her centre sits at 53.8% of the canvas height, so the top
+  // shifts up to keep the design's centre point.
   lottieWrap: {
     position: 'absolute',
-    left: (W - sx(305)) / 2,
-    top: sy(261) + sx(3),
-    width: sx(305),
-    height: sx(221),
+    left: (W - sx(283)) / 2,
+    top: sy(261) - sx(27),
+    width: sx(283),
+    height: sx(283),
   },
   stack: { ...StyleSheet.absoluteFillObject },
   lottie: { width: '100%', height: '100%' },

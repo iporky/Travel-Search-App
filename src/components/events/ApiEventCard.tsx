@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { PressableScale as Pressable } from '../PressableScale';
+import { BookmarkButton } from './BookmarkButton';
 import Svg, { Path } from 'react-native-svg';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { ApiEvent } from '../../api/events';
@@ -144,13 +146,13 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
         </Pressable>
       </View>
       {/* Icon/Save — top-right of the info block. */}
-      <Pressable style={styles.save} hitSlop={8} onPress={onToggleSave}>
-        <Ionicons
-          name={event.save_status ? 'bookmark' : 'bookmark-outline'}
-          size={16}
-          color={event.save_status ? colors.blue[500] : colors.gray[700]}
-        />
-      </Pressable>
+      <BookmarkButton
+        saved={!!event.save_status}
+        size={16}
+        idleColor={colors.gray[700]}
+        onPress={onToggleSave}
+        style={styles.save}
+      />
     </View>
   );
 
