@@ -1,19 +1,19 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  Animated,
-  Dimensions,
+import React, { useEffect } from 'react';
+import { Dimensions, GestureResponderEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
   Easing,
-  Image,
-  ImageSourcePropType,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
-import { onboardingSource } from '../../assets/onboardingAssets';
+import { AutoFitTitle } from '../../components/AutoFitTitle';
 import { PAY_CARD_BIRD_SVG, PAY_JUMP_SVG, PAY_ATM_SVG } from '../../assets/screen4Pay';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -22,48 +22,51 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-
 interface Props {
   activeIndex: number;
-  onPress: () => void;
+  onPress: (e: GestureResponderEvent) => void;
   active?: boolean;
 }
 
+const sine = Easing.inOut(Easing.sin);
+// Worklet-safe distances (the sx/sy helpers are JS-thread functions).
+const JUMP_X_FROM = sx(20);
+const JUMP_X_OVERSHOOT = sx(-6);
+const JUMP_Y_FROM = sy(180);
+
 export function SplashWelcome4({ onPress, active }: Props) {
   const { t } = useTranslation();
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const jump      = useRef(new Animated.Value(0)).current;
-  const floatBird = useRef(new Animated.Value(0)).current;
+  const fade = useSharedValue(0);
+  const jump = useSharedValue(0);
+  const float = useSharedValue(0);
 
   useEffect(() => {
     if (!active) return;
-    fadeAnim.setValue(0); jump.setValue(0); floatBird.setValue(0);
-    // Bird jumps upward from the ATM area: quick fade, spring up with overshoot.
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-      Animated.spring(jump, { toValue: 1, friction: 5, tension: 45, useNativeDriver: true }),
-    ]).start(() => {
-      Animated.loop(Animated.sequence([
-        Animated.timing(floatBird, { toValue: 1, duration: 1750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(floatBird, { toValue: 0, duration: 1750, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])).start();
-    });
-  }, [active]);
+    fade.value = 0;
+    jump.value = 0;
+    float.value = 0;
+    // Bird jumps upward from the ATM area: quick fade, spring up with
+    // overshoot, then a slow float once it has landed.
+    fade.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
+    jump.value = withSpring(1, { damping: 9, stiffness: 60 });
+    float.value = withDelay(
+      700,
+      withRepeat(withSequence(withTiming(1, { duration: 1750, easing: sine }), withTiming(0, { duration: 1750, easing: sine })), -1, false),
+    );
+  }, [active, fade, jump, float]);
 
-  const jumpY = jump.interpolate({ inputRange: [0, 1], outputRange: [sy(180), 0] });
-  const jumpX = jump.interpolate({ inputRange: [0, 0.5, 1], outputRange: [sx(20), sx(-6), 0] });
-  const floatY = floatBird.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const heroStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [
+      { translateX: interpolate(jump.value, [0, 0.5, 1], [JUMP_X_FROM, JUMP_X_OVERSHOOT, 0]) },
+      { translateY: interpolate(jump.value, [0, 1], [JUMP_Y_FROM, 0]) },
+      { translateY: interpolate(float.value, [0, 1], [0, -7]) },
+    ],
+  }));
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
-      <LinearGradient
-        colors={['#f5f7ff', '#eaf4fb', '#e3f4fb']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
       {/* Soft radial glow behind the scene. */}
       <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(362) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
         <Defs>
@@ -77,37 +80,33 @@ export function SplashWelcome4({ onPress, active }: Props) {
 
       {/* Blurred ATM queue backdrop (the "waiting" you skip). SVG bakes the
           0.6 opacity + blur; rect content sits at (3,3) inside a 189×128 box. */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(42), top: sy(418), width: sx(189), height: sy(128), opacity: fadeAnim }}>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: sx(42), top: sy(418), width: sx(189), height: sy(128) }, fadeStyle]}>
         <SvgXml xml={PAY_ATM_SVG} width={sx(189)} height={sy(128)} />
       </Animated.View>
 
       {/* Motion trail of the jump. */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(53), top: sy(311), width: sx(185), height: sy(178), opacity: fadeAnim }}>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: sx(53), top: sy(311), width: sx(185), height: sy(178) }, fadeStyle]}>
         <SvgXml xml={PAY_JUMP_SVG} width={sx(185)} height={sy(178)} />
       </Animated.View>
 
       {/* Hero bird holding a card — jumps up from the ATM area. */}
       <Animated.View
         pointerEvents="none"
-        style={{
-          position: 'absolute', left: sx(105), top: sy(189), width: sx(246), height: sy(178),
-          opacity: fadeAnim,
-          transform: [{ translateX: jumpX }, { translateY: jumpY }, { translateY: floatY }],
-        }}
+        style={[{ position: 'absolute', left: sx(105), top: sy(189), width: sx(246), height: sy(178) }, heroStyle]}
       >
         <SvgXml xml={PAY_CARD_BIRD_SVG} width={sx(246)} height={sy(178)} />
       </Animated.View>
 
-      {/* Logo */}
       {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bottom text */}
-      <Animated.View style={[styles.contentContainer, { bottom: sy(129), opacity: fadeAnim, paddingHorizontal: sx(16) }]}>
+      <Animated.View style={[styles.contentContainer, { bottom: sy(129), paddingHorizontal: sx(16) }, fadeStyle]}>
         <View style={styles.textBlock}>
-          <View style={styles.titleRow}>
+          {/* Long translations shrink uniformly to fit one line. */}
+          <AutoFitTitle maxWidth={W - sx(40)}>
             <Text style={styles.titleBold}>{t('splash.four.titleBold')} </Text>
             <Text style={styles.titleMed}>{t('splash.four.titleMed')}</Text>
-          </View>
+          </AutoFitTitle>
           <Text style={styles.subtitle}>{t('splash.four.subtitle')}</Text>
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
@@ -117,7 +116,7 @@ export function SplashWelcome4({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#e3f4fb' },
+  root: { width: '100%', height: '100%', overflow: 'hidden' },
   contentContainer: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   textBlock: { alignItems: 'center', gap: sy(20) },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },

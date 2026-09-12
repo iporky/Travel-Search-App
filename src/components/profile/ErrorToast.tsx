@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing } from '../../theme/tokens';
 
@@ -16,21 +17,27 @@ type Props = {
 };
 
 export function ErrorToast({ visible, message, onHide, durationMs = 3000 }: Props) {
-  const opacity = useRef(new Animated.Value(0)).current;
+  // 0 → 1 reveal: fades in with a touch of scale, on the UI thread.
+  const reveal = useSharedValue(0);
 
   useEffect(() => {
     if (!visible) return;
-    opacity.setValue(0);
-    Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+    reveal.value = 0;
+    reveal.value = withTiming(1, { duration: 160 });
     const id = setTimeout(onHide, durationMs);
     return () => clearTimeout(id);
-  }, [visible, durationMs, onHide, opacity]);
+  }, [visible, durationMs, onHide, reveal]);
+
+  const toastStyle = useAnimatedStyle(() => ({
+    opacity: reveal.value,
+    transform: [{ scale: interpolate(reveal.value, [0, 1], [0.96, 1]) }],
+  }));
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onHide}>
       <Pressable style={styles.scrim} onPress={onHide} />
       <View style={styles.center} pointerEvents="box-none">
-        <Animated.View style={[styles.toast, { opacity }]}>
+        <Animated.View style={[styles.toast, toastStyle]}>
           <MaterialIcons name="error-outline" size={24} color={colors.surface.card} />
           <Text style={styles.text} numberOfLines={2}>
             {message}

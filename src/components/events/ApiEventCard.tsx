@@ -1,7 +1,9 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { ClipPath, Defs, Image as SvgImage, Path } from 'react-native-svg';
+import { PressableScale as Pressable } from '../PressableScale';
+import { BookmarkButton } from './BookmarkButton';
+import Svg, { Path } from 'react-native-svg';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { ApiEvent } from '../../api/events';
 
@@ -53,72 +55,68 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
   const meta = [event.schedule ?? event.date, event.category].filter(Boolean).join(' · ');
   const H = CARD_H;
   const R = 20;
+  // A poster URL that fails to decode falls back to the category art. (The
+  // photo is a plain RN <Image> on purpose: rendering remote posters through
+  // react-native-svg's <Image> hard-crashed the app with a native NPE
+  // whenever Fresco delivered a null bitmap — bad URL, or the card recycled
+  // mid-download during the load-more scroll.)
+  const [imgFailed, setImgFailed] = useState(false);
+  const showPhoto = !!event.image && !imgFailed;
 
-  // Slanted photo silhouette (in image-local coords, 174 wide × 142 tall).
-  // Left variant: outer edge on the left is rounded; inner edge slants
-  // top(x=150) → bottom(x=174). Right variant is the mirror image.
-  const leftPath = `M ${R} 0 H ${IMG_W - SLANT} L ${IMG_W} ${H} H ${R} A ${R} ${R} 0 0 1 0 ${H - R} V ${R} A ${R} ${R} 0 0 1 ${R} 0 Z`;
-  const rightPath = `M 0 ${H} L ${SLANT} 0 H ${IMG_W - R} A ${R} ${R} 0 0 1 ${IMG_W} ${R} V ${H - R} A ${R} ${R} 0 0 1 ${IMG_W - R} ${H} Z`;
-  // The slanted inner edge on its own (for the divider strokes).
+  // The diagonal cut is an overlay: a wedge filled with the panel color drawn
+  // over the photo's inner edge, top(x=150) → bottom(x=174) on the left
+  // variant (mirrored on the right), plus the divider strokes along it.
+  const wedgePath = imageLeft
+    ? `M ${IMG_W - SLANT} 0 L ${IMG_W} ${H} L ${IMG_W} 0 Z`
+    : `M ${SLANT} 0 L 0 ${H} L 0 0 Z`;
   const edgePath = imageLeft ? `M ${IMG_W - SLANT} 0 L ${IMG_W} ${H}` : `M ${SLANT} 0 L 0 ${H}`;
-  const clipId = `evclip-${event.id}-${imageLeft ? 'l' : 'r'}`;
   const art = categoryArt(event.category);
 
+  // Info column (Buzz/Eventcard 11478:76670): starts 9 past the photo and
+  // ends 16 from the card's outer edge — 147 wide on the 346 card, with the
+  // text column at 129 (18 reserved for Icon/Save's overlap). Never less than
+  // 110 so thin screens shrink the text instead of running it under the photo.
+  const infoW = Math.max(110, width - IMG_W - 9 - 16);
+
   const photo = (
-    <View style={[styles.imageBox, imageLeft ? styles.imageLeft : styles.imageRight]}>
-      <Svg width={IMG_W} height={H} viewBox={`0 0 ${IMG_W} ${H}`}>
-        <Defs>
-          <ClipPath id={clipId}>
-            <Path d={imageLeft ? leftPath : rightPath} />
-          </ClipPath>
-        </Defs>
-        {event.image ? (
-          <SvgImage
-            href={{ uri: event.image }}
-            width={IMG_W}
-            height={H}
-            preserveAspectRatio="xMidYMid slice"
-            clipPath={`url(#${clipId})`}
-          />
-        ) : (
-          <Path d={imageLeft ? leftPath : rightPath} fill={art.tint} />
-        )}
-        {/* Divider along the slanted inner edge — a soft inner shadow plus a
-            hairline, both clipped to the photo so a white poster still reads
-            as a distinct slab against the white info panel. */}
-        <Path
-          d={edgePath}
-          stroke="rgba(16,24,40,0.10)"
-          strokeWidth={8}
-          fill="none"
-          clipPath={`url(#${clipId})`}
+    <View
+      style={[
+        styles.imageBox,
+        imageLeft ? styles.imageLeft : styles.imageRight,
+        !showPhoto && { backgroundColor: art.tint },
+      ]}
+    >
+      {showPhoto ? (
+        <Image
+          source={{ uri: event.image! }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          onError={() => setImgFailed(true)}
         />
-        <Path
-          d={edgePath}
-          stroke="rgba(16,24,40,0.16)"
-          strokeWidth={1.5}
-          fill="none"
-          clipPath={`url(#${clipId})`}
-        />
-        {/* Faint outline on the outer silhouette so pale photos keep their shape. */}
-        <Path
-          d={imageLeft ? leftPath : rightPath}
-          stroke="rgba(16,24,40,0.07)"
-          strokeWidth={2}
-          fill="none"
-          clipPath={`url(#${clipId})`}
-        />
-      </Svg>
-      {!event.image && (
+      ) : (
         <View style={styles.imageFallbackIcon} pointerEvents="none">
           <Ionicons name={art.icon} size={44} color={colors.blue[500]} />
         </View>
       )}
+      <Svg
+        width={IMG_W}
+        height={H}
+        viewBox={`0 0 ${IMG_W} ${H}`}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      >
+        {/* Panel-colored wedge cuts the slant into the rectangular photo. */}
+        <Path d={wedgePath} fill="#fefefe" />
+        {/* Divider along the slanted inner edge — soft shade + hairline so a
+            white poster still reads as a distinct slab against the panel. */}
+        <Path d={edgePath} stroke="rgba(16,24,40,0.10)" strokeWidth={8} fill="none" />
+        <Path d={edgePath} stroke="rgba(16,24,40,0.16)" strokeWidth={1.5} fill="none" />
+      </Svg>
     </View>
   );
 
   const info = (
-    <View style={[styles.info, imageLeft ? styles.infoRight : styles.infoLeft]}>
+    <View style={[styles.info, { width: infoW }, imageLeft ? styles.infoRight : styles.infoLeft]}>
       <View style={styles.textInfo}>
         {meta ? (
           <Text style={styles.meta} numberOfLines={1}>
@@ -130,7 +128,7 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
         </Text>
         {event.location ? (
           <View style={styles.locationRow}>
-            <Ionicons name="location" size={15} color={colors.gray[700]} />
+            <Ionicons name="location" size={15} color="#93a5b9" />
             <Text style={styles.location} numberOfLines={1}>
               {event.location}
             </Text>
@@ -148,13 +146,13 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
         </Pressable>
       </View>
       {/* Icon/Save — top-right of the info block. */}
-      <Pressable style={styles.save} hitSlop={8} onPress={onToggleSave}>
-        <Ionicons
-          name={event.save_status ? 'bookmark' : 'bookmark-outline'}
-          size={16}
-          color={event.save_status ? colors.blue[500] : colors.gray[700]}
-        />
-      </Pressable>
+      <BookmarkButton
+        saved={!!event.save_status}
+        size={16}
+        idleColor={colors.gray[700]}
+        onPress={onToggleSave}
+        style={styles.save}
+      />
     </View>
   );
 
@@ -182,9 +180,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fefefe',
     borderRadius: 20,
   },
-  imageBox: { position: 'absolute', top: 0, width: IMG_W, height: CARD_H },
-  imageLeft: { left: 0 },
-  imageRight: { right: 0 },
+  imageBox: { position: 'absolute', top: 0, width: IMG_W, height: CARD_H, overflow: 'hidden' },
+  imageLeft: { left: 0, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
+  imageRight: { right: 0, borderTopRightRadius: 20, borderBottomRightRadius: 20 },
   imageFallbackIcon: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -193,18 +191,19 @@ const styles = StyleSheet.create({
   info: {
     position: 'absolute',
     top: 14,
-    bottom: 14,
-    width: 158,
-    justifyContent: 'space-between',
+    height: 115,
+    // Design stacks the like row 8 under the text block (no bottom pinning).
+    gap: 8,
   },
-  infoRight: { right: 12 },
-  infoLeft: { left: 14 },
-  textInfo: { gap: 4, paddingRight: 24 },
+  infoRight: { right: 16 },
+  infoLeft: { left: 16 },
+  textInfo: { gap: 4, paddingRight: 18 },
   meta: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: 12,
     lineHeight: 16,
-    color: colors.gray[700],
+    // Semantic/Content/muted — time · place reads quieter than the title.
+    color: '#93a5b9',
   },
   title: {
     fontFamily: 'NationalPark_600SemiBold',
@@ -220,7 +219,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: -0.12,
-    color: colors.gray[700],
+    // Semantic/Content/muted, matching the meta line.
+    color: '#93a5b9',
   },
   bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -235,5 +235,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     overflow: 'hidden',
   },
-  save: { position: 'absolute', top: -4, right: 0, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  save: { position: 'absolute', top: -4, right: -6, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
 });

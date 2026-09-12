@@ -1,8 +1,7 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
-  FlatList,
+  GestureResponderEvent,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -10,8 +9,17 @@ import {
   Text,
   useWindowDimensions,
   View,
-  ViewToken,
 } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme/tokens';
@@ -23,6 +31,7 @@ import { SplashWelcome4 } from './onboarding/SplashWelcome4';
 import { SignIn } from './auth/SignIn';
 import { LanguageScreen } from './LanguageScreen';
 import { onboardingSource } from '../assets/onboardingAssets';
+import { WelcomeParallax } from '../components/WelcomeParallax';
 
 // Memoized slides: they only re-render when their own `active` flag flips,
 // keeping the swipe gesture running purely on the native scroll thread.
@@ -130,6 +139,36 @@ interface Props {
   initialSignInIndex?: boolean;
 }
 
+/**
+ * One pager page. Panoramic transition: the content glides at finger speed
+ * over the shared background (no offset/scale — that read as a separate
+ * screen arriving), with only a gentle fade for depth. The fade is a worklet
+ * reading the scroll offset on the UI thread, so it costs no JS per frame.
+ */
+function Page({
+  index,
+  width,
+  height,
+  scrollX,
+  children,
+}: {
+  index: number;
+  width: number;
+  height: number;
+  scrollX: SharedValue<number>;
+  children: React.ReactNode;
+}) {
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollX.value,
+      [(index - 1) * width, index * width, (index + 1) * width],
+      [0.45, 1, 0.45],
+      Extrapolation.CLAMP,
+    ),
+  }));
+  return <Animated.View style={[{ width, height }, style]}>{children}</Animated.View>;
+}
+
 export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) {
   const SIGNIN_SLIDE = SLIDES.length - 1; // index 4
   const insets = useSafeAreaInsets();
@@ -144,99 +183,138 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
   const [showLanguage, setShowLanguage] = useState(false);
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
-  const flatRef = useRef<FlatList<Slide>>(null);
-  // Horizontal scroll offset — drives the per-page slide/fade entirely on the
-  // native thread (no JS round-trip), so the transition tracks the finger at
-  // 60fps and settles with the pager's own deceleration.
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // Horizontal scroll offset — a shared value written by the scroll handler
+  // on the UI thread, so the page fades and the parallax world track the
+  // finger at 60fps with no JS round-trip and settle with the pager's own
+  // deceleration.
+  const scrollX = useSharedValue(initialSignInIndex ? SIGNIN_SLIDE * winW : 0);
 
-  const handleViewableChange = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0) {
-        const next = viewableItems[0].index ?? 0;
-        if (next !== activeIndexRef.current) setActiveIndex(next);
-      }
-    }
-  ).current;
+  // Page index after any scroll settles, finger or tap. A plain ScrollView
+  // rather than a FlatList: five static pages need no virtualization, and a
+  // virtualized list would run viewability and cell bookkeeping in JS on every
+  // scroll event, so this keeps the JS thread idle while the pager moves.
+  const onMomentumEnd = useCallback(
+    (x: number) => {
+      const next = Math.round(x / winW);
+      if (next !== activeIndexRef.current) setActiveIndex(next);
+    },
+    [winW],
+  );
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+    },
+    onMomentumEnd: (e) => {
+      runOnJS(onMomentumEnd)(e.contentOffset.x);
+    },
+  });
+
+  // Tap-driven page change, handed to the pager's own animated scroll so it
+  // runs entirely on the native thread — identical motion to a finger swipe.
+  // A JS-driven glide was tried here to slow the travel down and read as
+  // jittery no matter how the steps were paced, so the platform scroll it is.
+  const glideTo = useCallback(
+    (index: number) => {
+      const target = Math.max(0, Math.min(SLIDES.length - 1, index));
+      if (target === activeIndexRef.current) return;
+      activeIndexRef.current = target; // a second tap chains from the target
+      setActiveIndex(target);
+      scrollRef.current?.scrollTo({ x: target * winW, y: 0, animated: true });
+    },
+    [scrollRef, winW],
+  );
+
+  // Pin the opening page once the row has its full width. `contentOffset`
+  // alone isn't enough: Android restores a saved scroll position when the
+  // activity is recreated (after the process is killed, say), which can drop
+  // the pager onto a later slide or between two of them. Re-asserting on the
+  // next frame covers a restore that lands after this one.
+  const didPlace = useRef(false);
+  const handleContentSize = useCallback(
+    (contentW: number) => {
+      if (didPlace.current || contentW < SLIDES.length * winW - 1) return;
+      didPlace.current = true;
+      const x = (initialSignInIndex ? SIGNIN_SLIDE : 0) * winW;
+      scrollX.value = x;
+      scrollRef.current?.scrollTo({ x, y: 0, animated: false });
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ x, y: 0, animated: false }));
+    },
+    [initialSignInIndex, SIGNIN_SLIDE, winW, scrollRef, scrollX],
+  );
 
   const goNext = useCallback(() => {
     const idx = activeIndexRef.current;
-    if (idx < SLIDES.length - 1) {
-      flatRef.current?.scrollToIndex({ index: idx + 1, animated: true });
-    } else {
-      onDone();
-    }
-  }, [onDone]);
+    if (idx < SLIDES.length - 1) glideTo(idx + 1);
+    else onDone();
+  }, [glideTo, onDone]);
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: Slide; index: number }) => {
-      // Memoized slides: `activeIndex` is passed as the slide's own index so the
-      // prop stays constant — only the `active` boolean flip triggers a re-render.
-      let slide: React.ReactNode = null;
-      if (item.id === '1') slide = <MemoSplash1 activeIndex={0} active={activeIndex === 0} onPress={goNext} />;
-      else if (item.id === '2') slide = <MemoSplash2 activeIndex={1} active={activeIndex === 1} onPress={goNext} />;
-      else if (item.id === '3') slide = <MemoSplash3 activeIndex={2} active={activeIndex === 2} onPress={goNext} />;
-      else if (item.id === '4') slide = <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={goNext} />;
-      else if (item.id === '5') slide = <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={goNext} />;
-      // Slide-in transition: the incoming page glides in from a slight offset
-      // while fading and scaling up; the outgoing page recedes the same way.
-      // Interpolated from scrollX so it's continuous under the finger.
-      const inputRange = [(index - 1) * winW, index * winW, (index + 1) * winW];
-      const opacity = scrollX.interpolate({
-        inputRange,
-        outputRange: [0.3, 1, 0.3],
-        extrapolate: 'clamp',
-      });
-      const translateX = scrollX.interpolate({
-        inputRange,
-        outputRange: [winW * 0.2, 0, -winW * 0.2],
-        extrapolate: 'clamp',
-      });
-      const scale = scrollX.interpolate({
-        inputRange,
-        outputRange: [0.94, 1, 0.94],
-        extrapolate: 'clamp',
-      });
+  const goPrev = useCallback(() => {
+    const idx = activeIndexRef.current;
+    if (idx > 0) glideTo(idx - 1);
+  }, [glideTo]);
 
-      // Each page fills the full window → background image covers the whole screen.
-      return (
-        <Animated.View
-          style={{ width: winW, height: winH, opacity, transform: [{ translateX }, { scale }] }}
-        >
-          {slide}
-        </Animated.View>
-      );
+  // Right half of the screen goes forward, left half goes back. On the
+  // sign-in slide only the back half does anything (forward is the buttons).
+  const handleTap = useCallback(
+    (e: GestureResponderEvent) => {
+      const x = e.nativeEvent.pageX;
+      if (x < winW / 2) goPrev();
+      else if (activeIndexRef.current < SLIDES.length - 1) goNext();
     },
-    [activeIndex, goNext, winW, winH, scrollX],
+    [winW, goPrev, goNext],
   );
+
+  const pages = useMemo(() => {
+    // Memoized slides: `activeIndex` is passed as the slide's own index so the
+    // prop stays constant — only the `active` boolean flip triggers a re-render.
+    const slideFor = (id: string) => {
+      if (id === '1')
+        return (
+          <MemoSplash1
+            activeIndex={0}
+            active={activeIndex === 0}
+            onPress={handleTap}
+            scrollX={scrollX}
+            pageWidth={winW}
+          />
+        );
+      if (id === '2') return <MemoSplash2 activeIndex={1} active={activeIndex === 1} onPress={handleTap} />;
+      if (id === '3') return <MemoSplash3 activeIndex={2} active={activeIndex === 2} onPress={handleTap} />;
+      if (id === '4') return <MemoSplash4 activeIndex={3} active={activeIndex === 3} onPress={handleTap} />;
+      return <MemoSignIn activeIndex={4} active={activeIndex === 4} onPress={handleTap} />;
+    };
+    return SLIDES.map((item, index) => (
+      <Page key={item.id} index={index} width={winW} height={winH} scrollX={scrollX}>
+        {slideFor(item.id)}
+      </Page>
+    ));
+  }, [activeIndex, handleTap, winW, winH, scrollX]);
+
   return (
     <View style={styles.container}>
-      <Animated.FlatList
-        ref={flatRef}
-        data={SLIDES}
-        keyExtractor={(s) => s.id}
-        renderItem={renderItem}
+      {/* One continuous parallax world behind all five pages. */}
+      <WelcomeParallax scrollX={scrollX} pageWidth={winW} pageHeight={winH} pages={SLIDES.length} />
+
+      {/* Plain paging ScrollView: all five pages are mounted up front, so a
+          swipe never hits a blank page and — unlike a virtualized list — no
+          JavaScript runs while it scrolls. */}
+      <Animated.ScrollView
+        ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: true,
-        })}
-        onViewableItemsChanged={handleViewableChange}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-        getItemLayout={(_, index) => ({ length: winW, offset: winW * index, index })}
-        initialScrollIndex={initialSignInIndex ? SIGNIN_SLIDE : 0}
-        // Pre-mount every slide so swipes never hit a blank page and the
-        // scroll runs entirely on the native thread — butter smooth.
-        initialNumToRender={SLIDES.length}
-        maxToRenderPerBatch={SLIDES.length}
-        windowSize={SLIDES.length + 2}
-        removeClippedSubviews={false}
+        onScroll={scrollHandler}
+        contentOffset={{ x: initialSignInIndex ? SIGNIN_SLIDE * winW : 0, y: 0 }}
+        onContentSizeChange={handleContentSize}
         decelerationRate="fast"
         bounces={false}
         overScrollMode="never"
         scrollEventThrottle={16}
-      />
+      >
+        {pages}
+      </Animated.ScrollView>
 
       {/* Static top bar — logo (left) and language selector (right) share one
           baseline and stay put while the pages slide underneath. */}

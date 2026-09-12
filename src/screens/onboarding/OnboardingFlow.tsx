@@ -2,10 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Animated,
+  Alert,
   Dimensions,
-  Easing,
-  Image,
   ImageSourcePropType,
   Modal,
   Pressable,
@@ -14,6 +12,8 @@ import {
   View,
 } from 'react-native';
 import { SvgXml } from 'react-native-svg';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import LottieView from 'lottie-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FLOW_A_QUESTIONS,
@@ -28,6 +28,7 @@ import {
   getOnboarding,
   recordToAnswers,
   saveOnboarding,
+  setChosenUsername,
 } from '../../api/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -36,9 +37,12 @@ import { colors } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { QuestionScreen } from './QuestionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
+import { PressableScale } from '../../components/PressableScale';
 import { AVATAR_SOURCE } from '../../assets/onboardingIcons';
 import { FORCE_ONBOARDING } from '../../config';
-import { ScreenTransition } from '../../components/ScreenTransition';
+import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
+import { CROSSFADE_DURATION, ScreenTransition } from '../../components/ScreenTransition';
+import { UsernameTakenError } from '../../api/errors';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -49,10 +53,6 @@ const sy = (n: number) => (n * H) / DESIGN_H;
 const BIRD = onboardingSource(
   require('../../../assets/mascot/bird-hero.png') as ImageSourcePropType,
   'bird-hero',
-);
-const BACK_BTN_IMG = onboardingSource(
-  require('../../../assets/onboarding/chevron-left.png') as ImageSourcePropType,
-  'chevron-left',
 );
 
 // Counter +/- icons (provided SVGs, gray #657586).
@@ -66,6 +66,7 @@ interface Props {
 }
 
 export function OnboardingFlow({ onComplete }: Props) {
+  const { t } = useTranslation();
   const { user, saveProfile, fetchProfile, personalizationStartsFromQuestions } = useAuth();
   const { language } = useLanguage();
   // Flow: 'intro' (Let's personalize + Get started) → 'profile' (name + avatar)
@@ -78,6 +79,9 @@ export function OnboardingFlow({ onComplete }: Props) {
   // If the backend already has a profile (username set) for this user, skip the
   // name/photo screen and go straight to the questions.
   const [skipProfile, setSkipProfile] = useState(false);
+  // A name the backend rejected on create, kept so the username screen can
+  // flag it and offer the alternatives the server suggested.
+  const [taken, setTaken] = useState<{ name: string; suggestions: string[] } | null>(null);
   // Default username seeded from the provider display name (Google/Facebook).
   const initialUsername = (user?.name ?? '')
     .replace(/[^A-Za-z0-9._]/g, '')
@@ -107,8 +111,8 @@ export function OnboardingFlow({ onComplete }: Props) {
     fetchProfile()
       .then((profile) => {
         if (cancelled) return;
-        // TESTING: FORCE_ONBOARDING keeps the username screen in the flow even
-        // when the backend already has one (it arrives prefilled for editing).
+        // A user who already has a username skips the screen; FORCE_ONBOARDING
+        // keeps it in the flow for testing (it arrives prefilled for editing).
         if (!FORCE_ONBOARDING && profile?.username) setSkipProfile(true);
       })
       .catch(() => {});
@@ -163,7 +167,18 @@ export function OnboardingFlow({ onComplete }: Props) {
       .then(() =>
         saveOnboarding({ answers: currentAnswers, preferredLanguage: language.code, method }),
       )
-      .catch((e) => console.warn('[Onboarding] sync failed', e?.message ?? e));
+      .catch((e) => {
+        if (e instanceof UsernameTakenError) {
+          // The name went stale between the check and the save. Send the user
+          // back to pick another rather than silently dropping their answers.
+          console.warn('[Onboarding] username taken on save', e.username, e.suggestions);
+          dirRef.current = 'pop';
+          setPhase('profile');
+          Alert.alert(t('onboarding.usernameTaken'));
+          return;
+        }
+        console.warn('[Onboarding] sync failed', e?.message ?? e);
+      });
   };
 
   const handleConfirm = () => {
@@ -216,8 +231,8 @@ export function OnboardingFlow({ onComplete }: Props) {
     if (step > 0) setStep((s) => s - 1);
   };
 
-  // No profile screen anymore, so progress is based purely on the question count.
-  const progress = (step + 0.5) / total;
+  // NumberOfPeople is a bottom sheet over the previous question, not a page.
+  const isCounterStep = phase === 'questions' && current?.layout === 'counter';
 
   let body: React.ReactNode;
   if (phase === 'intro') {
@@ -226,12 +241,17 @@ export function OnboardingFlow({ onComplete }: Props) {
   } else if (phase === 'profile') {
     body = (
       <ProfileSetupScreen
-        progress={0.06}
         onBack={() => {
           dirRef.current = 'pop';
           setPhase('intro');
         }}
         onConfirm={async (username, photoUri) => {
+          // Claim the name here, at account creation. PATCH /profile is what
+          // enforces username uniqueness — it answers 409 "Username is already
+          // taken." — and unlike the onboarding create it needs no answers yet
+          // (that one 422s on the empty purpose at this point in the flow).
+          setChosenUsername(username);
+          setTaken(null);
           try {
             await saveProfile({ name: username, photoUri: photoUri ?? undefined });
             // Tracking contract rows 9a / 12 — only what the user changed here.
@@ -240,12 +260,22 @@ export function OnboardingFlow({ onComplete }: Props) {
             }
             if (photoUri) track.profileEdit('edit_profile_photo', 'profile_photo');
           } catch (e) {
+            if (e instanceof UsernameTakenError) {
+              // Stay put: the field flags the name and offers alternatives.
+              setTaken({ name: e.username, suggestions: e.suggestions });
+              return;
+            }
             console.warn('[Onboarding] save profile failed', e);
           }
           setPhase('questions');
         }}
-        initialValue={initialUsername}
+        // Deliberately blank: the Google/Facebook display name is not a
+        // username, and offering it as one nudged users into a name they had
+        // not chosen — usually the one already taken. They type their own.
+        initialValue=""
         initialPhotoUrl={user?.photo ?? null}
+        takenUsername={taken?.name ?? null}
+        takenSuggestions={taken?.suggestions ?? []}
       />
     );
   } else if (phase === 'welcome') {
@@ -253,35 +283,18 @@ export function OnboardingFlow({ onComplete }: Props) {
   } else if (current?.layout === 'counter') {
     // NumberOfPeople stepper — a dim bottom-sheet overlay on top of the previous
     // question (per Figma), not a standalone screen. The base page keeps its own
-    // back button and its own progress value: the overlay must not remove the
-    // back button or advance the progress bar (it's just an overlay).
+    // back button: the overlay must not remove it (it's just an overlay).
     const prevQuestion = step > 0 ? questionList[step - 1] : null;
-    const baseProgress = (step - 1 + 0.5) / total;
-    body = (
-      <>
-        {prevQuestion ? (
-          <QuestionScreen
-            question={prevQuestion}
-            selected={answers[prevQuestion.key] ?? []}
-            onToggle={() => {}}
-            onConfirm={() => {}}
-            onBack={handleBack}
-            progress={baseProgress}
-            canGoBack={step - 1 > 0}
-          />
-        ) : null}
-        <CounterOverlay
-          onClose={handleBack}
-          onConfirm={(value) => {
-            const next = { ...answers, [current.key]: [String(value)] };
-            setAnswers(next);
-            syncAnswers(next);
-            if (step < total - 1) setStep((s) => s + 1);
-            else setPhase('welcome');
-          }}
-        />
-      </>
-    );
+    body = prevQuestion ? (
+      <QuestionScreen
+        question={prevQuestion}
+        selected={answers[prevQuestion.key] ?? []}
+        onToggle={() => {}}
+        onConfirm={() => {}}
+        onBack={handleBack}
+        canGoBack={step - 1 > 0}
+      />
+    ) : null;
   } else if (current) {
     body = (
       <QuestionScreen
@@ -290,7 +303,6 @@ export function OnboardingFlow({ onComplete }: Props) {
         onToggle={toggleOption}
         onConfirm={handleConfirm}
         onBack={handleBack}
-        progress={progress}
         canGoBack={step > 0}
       />
     );
@@ -298,6 +310,9 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Original design gradient (12320-52201). The animations blend into it
+          via edge feathering — the in-app equivalent of the designer's soft
+          "Illustration" blur layers. */}
       <LinearGradient
         colors={['#eaf4ff', '#f2f9ff']}
         style={StyleSheet.absoluteFill}
@@ -305,17 +320,34 @@ export function OnboardingFlow({ onComplete }: Props) {
         end={{ x: 0.5, y: 1 }}
       />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
-        {/* Every phase/step change slides in (forward) or back (pop) rather than
-            snapping — same motion language as the rest of the app. */}
+        {/* Every phase/step change cross-fades: the old page dissolves and
+            slides away while the new one eases in a beat later (forward from
+            the right, back from the left) — unhurried, never a cut. The
+            number-of-people step is an overlay on the previous question, so it
+            keeps that page's key and opening it does not re-run the transition. */}
         <ScreenTransition
-          transitionKey={`${phase}-${step}`}
+          transitionKey={`${phase}-${isCounterStep ? step - 1 : step}`}
           mode={dirRef.current}
+          duration={CROSSFADE_DURATION}
+          crossfade
           onTransitionEnd={() => {
             dirRef.current = 'push';
           }}
         >
           {body}
         </ScreenTransition>
+        {isCounterStep && current ? (
+          <CounterOverlay
+            onClose={handleBack}
+            onConfirm={(value) => {
+              const next = { ...answers, [current.key]: [String(value)] };
+              setAnswers(next);
+              syncAnswers(next);
+              if (step < total - 1) setStep((s) => s + 1);
+              else setPhase('welcome');
+            }}
+          />
+        ) : null}
       </SafeAreaView>
     </View>
   );
@@ -325,34 +357,52 @@ export function OnboardingFlow({ onComplete }: Props) {
 function SetupIntro({ onStart }: { onStart: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.92)).current;
-  const rise = useRef(new Animated.Value(12)).current;
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.92);
+  const rise = useSharedValue(12);
 
   useEffect(() => {
-    // Fade + rise + settle in, then wait for the user to tap Get started.
-    const anim = Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 550, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-      Animated.timing(rise, { toValue: 0, duration: 550, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
-    ]);
-    anim.start();
-    return () => anim.stop();
+    // Fade + rise + settle in (UI thread), then wait for the user to tap
+    // Get started.
+    opacity.value = withTiming(1, { duration: 550, easing: Easing.out(Easing.ease) });
+    rise.value = withTiming(0, { duration: 550, easing: Easing.out(Easing.ease) });
+    scale.value = withSpring(1, { damping: 9, stiffness: 120 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const enterStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: rise.value }, { scale: scale.value }],
+  }));
 
   return (
     <View style={introStyles.root}>
-      <Animated.View
-        style={[introStyles.center, { opacity, transform: [{ translateY: rise }, { scale }] }]}
-      >
-        <Image source={BIRD} style={introStyles.bird} resizeMode="contain" />
+      <Animated.View style={[introStyles.center, enterStyle]}>
+        {/* Welcome-bird Lottie (Onboarding_Username_Intro 12320:52326,
+            250×191). Full frame — no zoom-crop, so the bird and its halo are
+            never cut off; the edge feather alone dissolves the frames' baked
+            corner vignette into the screen background. */}
+        <View style={introStyles.birdLottieBox}>
+          {/* Soft halo UNDER the animation in its vignette's edge colour —
+              the designer's blurred Illustration layer. The frames' radial
+              vignette fades to ~#dbecfc at the borders; the light feather
+              finishes that fade, and the halo carries it out into the screen
+              gradient so no edge exists anywhere. */}
+          <LottieHalo color="#dbecfc" width={sx(250)} height={sx(191)} spread={sx(44)} />
+          <LottieView
+            source={require('../../../assets/lottie/welcome-bird.json')}
+            style={introStyles.birdLottieInner}
+            autoPlay
+            loop
+            resizeMode="cover"
+          />
+          <LottieEdgeFeather color="#dbecfc" top={0.1} bottom={0.12} side={0.1} />
+        </View>
         <Text style={introStyles.title}>{t('onboarding.setupTitle')}</Text>
       </Animated.View>
 
-      <Pressable onPress={onStart} style={[introStyles.cta, { marginBottom: Math.max(insets.bottom, sy(8)) }]}>
+      <PressableScale onPress={onStart} style={[introStyles.cta, { marginBottom: Math.max(insets.bottom, sy(8)) }]}>
         <Text style={introStyles.ctaText}>{t('onboarding.getStarted')}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -375,6 +425,12 @@ const introStyles = StyleSheet.create({
     letterSpacing: -0.16,
   },
   bird: { width: sx(150), height: sy(118), marginBottom: sy(6) },
+  birdLottieBox: {
+    width: sx(250),
+    height: sx(191),
+    marginBottom: sy(6),
+  },
+  birdLottieInner: { width: '100%', height: '100%' },
   title: {
     fontFamily: 'NationalPark_700Bold',
     fontSize: sx(28),
@@ -433,9 +489,9 @@ function CounterOverlay({
               <SvgXml xml={PLUS_SVG} width={sx(24)} height={sx(24)} />
             </Pressable>
           </View>
-          <Pressable onPress={() => onConfirm(count)} style={sheet.cta}>
+          <PressableScale onPress={() => onConfirm(count)} style={sheet.cta}>
             <Text style={sheet.ctaText}>{t('common.confirm')}</Text>
-          </Pressable>
+          </PressableScale>
         </Pressable>
       </Pressable>
     </Modal>
@@ -508,282 +564,71 @@ const sheet = StyleSheet.create({
   },
 });
 
-// ─── Number-of-people counter screen (unused — replaced by CounterOverlay) ────
-function CounterScreen({
-  question,
-  progress,
-  canGoBack,
-  onBack,
-  onConfirm,
-}: {
-  question: OnboardingQuestion;
-  progress: number;
-  canGoBack: boolean;
-  onBack: () => void;
-  onConfirm: (value: number) => void;
-}) {
-  const { t } = useTranslation();
-  const [count, setCount] = useState(2);
-  const [trackWidth, setTrackWidth] = useState(0);
-  const displayProgress = Math.max(0.08, Math.min(0.96, progress));
-  const pct = `${displayProgress * 100}%` as `${number}%`;
-  const fillTouchOffset = sx(5);
-  const touchProgress = trackWidth > 0 ? fillTouchOffset / trackWidth : 0;
-  const fillProgress = Math.min(0.96, displayProgress + touchProgress);
-
-  return (
-    <View style={ctr.root}>
-      {/* Header */}
-      <View style={ctr.header}>
-        <Pressable
-          onPress={onBack}
-          disabled={!canGoBack}
-          hitSlop={8}
-          style={[ctr.backBtn, !canGoBack && { opacity: 0 }]}
-        >
-          <Image source={BACK_BTN_IMG} style={ctr.backBtnImg} resizeMode="contain" />
-        </Pressable>
-      </View>
-
-      {/* Question bubble */}
-      <View style={ctr.bubbleRow}>
-        <Image source={AVATAR_SOURCE} style={ctr.birdAvatar} resizeMode="contain" />
-        <View style={ctr.bubble}>
-          <View style={ctr.bubbleTail} />
-          <Text style={ctr.bubbleText}>{question.prompt}</Text>
-        </View>
-      </View>
-
-      {/* Stepper */}
-      <View style={ctr.stepperOuter}>
-        <View style={ctr.stepperCard}>
-          <Text style={ctr.stepperTitle}>{t('onboarding.numberOfPeople')}</Text>
-          <View style={ctr.stepperRow}>
-            <Pressable
-              onPress={() => setCount((c) => Math.max(2, c - 1))}
-              style={ctr.stepperBtn}
-              hitSlop={12}
-            >
-              <Text style={ctr.stepperBtnText}>−</Text>
-            </Pressable>
-            <Text style={ctr.stepperValue}>{count}</Text>
-            <Pressable
-              onPress={() => setCount((c) => c + 1)}
-              style={ctr.stepperBtn}
-              hitSlop={12}
-            >
-              <Text style={ctr.stepperBtnText}>+</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-
-      {/* CTA */}
-      <View style={ctr.bottomBar}>
-        <Pressable onPress={() => onConfirm(count)} style={ctr.cta}>
-          <Text style={ctr.ctaText}>{t('common.confirm')}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-const ctr = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: sx(12),
-    height: sy(48),
-    paddingHorizontal: sx(20),
-    marginTop: sy(10),
-  },
-  backBtn: {
-    width: sx(32),
-    height: sx(32),
-    borderRadius: 999,
-    backgroundColor: '#d8ecfb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backBtnImg: {
-    width: sx(24),
-    height: sx(24),
-  },
-  progressTrack: {
-    flex: 1,
-    height: sy(8),
-    borderRadius: sx(999),
-    backgroundColor: '#c9e3ff',
-    overflow: 'visible',
-    justifyContent: 'center',
-  },
-  progressFill: {
-    height: sy(8),
-    borderRadius: sx(999),
-    overflow: 'hidden',
-  },
-  planeWrap: {
-    position: 'absolute',
-    zIndex: 4,
-    elevation: 10,
-  },
-  bubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: sx(8),
-    paddingHorizontal: sx(20),
-    paddingTop: sy(12),
-    paddingBottom: sy(12),
-  },
-  birdAvatar: { width: sx(56), height: sx(56) },
-  bubble: {
-    flex: 1,
-    backgroundColor: '#527dff',
-    borderRadius: sx(20),
-    borderBottomLeftRadius: sx(20),
-    paddingHorizontal: sx(16),
-    paddingVertical: sy(12),
-  },
-  bubbleTail: {
-    position: 'absolute',
-    left: sx(6),
-    bottom: sy(12),
-    width: 0,
-    height: 0,
-    borderTopWidth: sx(8),
-    borderTopColor: 'transparent',
-    borderRightWidth: sx(9),
-    borderRightColor: '#527dff',
-    borderBottomWidth: sx(2),
-    borderBottomColor: 'transparent',
-  },
-  bubbleText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(16),
-    lineHeight: sy(22),
-    color: '#fff',
-    letterSpacing: -0.16,
-  },
-  stepperOuter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: sx(24),
-  },
-  stepperCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: sx(24),
-    paddingVertical: sy(32),
-    paddingHorizontal: sx(24),
-    alignItems: 'center',
-    gap: sy(24),
-    shadowColor: '#c4d2ff',
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  stepperTitle: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(20),
-    lineHeight: sy(26),
-    color: '#1d192b',
-    letterSpacing: -0.2,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: sx(32),
-  },
-  stepperBtn: {
-    width: sx(48),
-    height: sx(48),
-    borderRadius: 999,
-    backgroundColor: '#eaefff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#9eb6ff',
-  },
-  stepperBtnText: {
-    fontSize: sx(26),
-    lineHeight: sx(30),
-    color: '#527dff',
-    fontFamily: 'NationalPark_500Medium',
-  },
-  stepperValue: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(52),
-    lineHeight: sy(60),
-    color: '#1d192b',
-    letterSpacing: -1,
-    minWidth: sx(60),
-    textAlign: 'center',
-  },
-  bottomBar: {
-    alignItems: 'center',
-    paddingBottom: sy(8),
-    paddingTop: sy(4),
-  },
-  cta: {
-    height: sy(56),
-    width: W - sx(40),
-    borderRadius: sx(20),
-    backgroundColor: '#527dff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: sy(8),
-  },
-  ctaText: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(16),
-    color: '#f2f9ff',
-    letterSpacing: -0.16,
-  },
-});
-
 // ─── Welcome / completion screen ─────────────────────────────────────────────
+// Onboarding_Complete (12320:52281): the "Welcome fly" Lottie (250×250, JPEG
+// frames on their own #ecf4fe bg) above the message, on a flat #ecf4fe screen
+// so the animation square blends seamlessly.
 function Welcome({ name, onContinue }: { name: string; onContinue: () => void }) {
   const { t } = useTranslation();
-  const float = useRef(new Animated.Value(0)).current;
-  const fade = useRef(new Animated.Value(0)).current;
+  const fade = useSharedValue(0);
+  // The bird is held back until the page hand-off has settled, and is only
+  // shown once its frames are decoded — mounting it during the cross-fade
+  // made it pop in halfway through the transition.
+  const [birdMounted, setBirdMounted] = useState(false);
+  const bird = useSharedValue(0);
+  const birdShown = useRef(false);
+  const revealBird = () => {
+    if (birdShown.current) return;
+    birdShown.current = true;
+    bird.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.ease) });
+  };
 
   useEffect(() => {
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: 700,
-      easing: Easing.out(Easing.ease),
-      useNativeDriver: true,
-    }).start();
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    ).start();
+    fade.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.ease) });
+    const mount = setTimeout(() => setBirdMounted(true), CROSSFADE_DURATION + 40);
+    return () => clearTimeout(mount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const birdY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
+  useEffect(() => {
+    if (!birdMounted) return;
+    // Should the load callback not arrive, still show the bird.
+    const fallback = setTimeout(revealBird, 700);
+    return () => clearTimeout(fallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [birdMounted]);
+  const birdStyle = useAnimatedStyle(() => ({ opacity: bird.value }));
+  // Fade + a short rise so the greeting settles under the bird.
+  const fadeStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ translateY: (1 - fade.value) * 10 }],
+  }));
 
   return (
     <View style={styles.welcomeRoot}>
       <View style={styles.welcomeCenter}>
-        <Animated.Image
-          source={BIRD}
-          style={[styles.welcomeBird, { opacity: fade, transform: [{ translateY: birdY }] }]}
-          resizeMode="contain"
-        />
-        <Animated.View style={{ opacity: fade, alignItems: 'center' }}>
+        <View style={styles.welcomeLottieBox}>
+          {birdMounted ? (
+            <Animated.View style={[styles.welcomeLottie, birdStyle]}>
+              <LottieView
+                source={require('../../../assets/lottie/welcome-fly.json')}
+                style={styles.welcomeLottie}
+                autoPlay
+                loop
+                resizeMode="cover"
+                onAnimationLoaded={revealBird}
+              />
+            </Animated.View>
+          ) : null}
+        </View>
+        <Animated.View style={[{ alignItems: 'center' as const }, fadeStyle]}>
           <Text style={styles.welcomeTitle}>{t('onboarding.welcomeTitle', { name })}</Text>
           <Text style={styles.welcomeSubtitle}>{t('onboarding.welcomeSubtitle')}</Text>
         </Animated.View>
       </View>
 
-      <Pressable onPress={onContinue} style={styles.welcomeCta}>
+      <PressableScale onPress={onContinue} style={styles.welcomeCta}>
         <Text style={styles.welcomeCtaText}>{t('onboarding.letsKonnect')}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -793,10 +638,18 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Welcome
-  welcomeRoot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: sy(16) },
-  welcomeCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: sy(36) },
+  // Welcome — flat #ecf4fe per Onboarding_Complete so the Lottie square blends.
+  welcomeRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: sy(16),
+    backgroundColor: '#ecf4fe',
+  },
+  welcomeCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: sy(24) },
   welcomeBird: { width: sx(180), height: sx(180) },
+  welcomeLottieBox: { width: sx(250), height: sx(250), borderRadius: sx(24), overflow: 'hidden' },
+  welcomeLottie: { width: '100%', height: '100%' },
   welcomeTitle: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(24),

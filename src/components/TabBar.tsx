@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { PressableScale as Pressable } from './PressableScale';
 import { SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, shadows, spacing, typography } from '../theme/tokens';

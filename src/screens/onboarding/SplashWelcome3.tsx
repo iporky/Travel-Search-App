@@ -1,19 +1,28 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
-  Animated,
   Dimensions,
-  Easing,
-  Image,
-  ImageSourcePropType,
+  GestureResponderEvent,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   View,
+  ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  Easing,
+  interpolate,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
-import { onboardingSource } from '../../assets/onboardingAssets';
+import { AutoFitTitle } from '../../components/AutoFitTitle';
 import {
   BUZZ_BIRD_TOP_SVG,
   BUZZ_BIRD_MID_SVG,
@@ -30,62 +39,96 @@ const DESIGN_H = 812;
 const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
-
 interface Props {
   activeIndex?: number;
-  onPress: () => void;
+  onPress: (e: GestureResponderEvent) => void;
   active?: boolean;
+}
+
+const sine = Easing.inOut(Easing.sin);
+// Worklet-safe distance (the sx/sy helpers are JS-thread functions).
+const SLIDE_FROM = sy(12);
+
+/** A slow up-and-down float, looping for the life of the value. */
+function startFloat(v: SharedValue<number>, dur: number, delay = 0) {
+  v.value = withDelay(
+    delay,
+    withRepeat(withSequence(withTiming(1, { duration: dur / 2, easing: sine }), withTiming(0, { duration: dur / 2, easing: sine })), -1, false),
+  );
+}
+
+/**
+ * An element that fades/slides in with its group (`g`) and then floats on its
+ * own loop (`fb`). Bubbles also carry a fixed tilt and a slightly larger
+ * slide-in; birds just fade and float.
+ */
+function Rise({
+  g,
+  fb,
+  amp,
+  slideIn = false,
+  rotate,
+  style,
+  children,
+}: {
+  g: SharedValue<number>;
+  fb: SharedValue<number>;
+  amp: number;
+  slideIn?: boolean;
+  rotate?: string;
+  style: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  const animated = useAnimatedStyle(() => {
+    const transform: ({ rotate: string } | { translateY: number })[] = [];
+    if (rotate) transform.push({ rotate });
+    if (slideIn) transform.push({ translateY: interpolate(g.value, [0, 1], [SLIDE_FROM, 0]) });
+    transform.push({ translateY: interpolate(fb.value, [0, 1], [0, -amp]) });
+    return { opacity: g.value, transform };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[style, animated]}>
+      {children}
+    </Animated.View>
+  );
 }
 
 export function SplashWelcome3({ onPress, active }: Props) {
   const { t } = useTranslation();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fade = useSharedValue(0);
   // group entrances: bird+bubble pairs (g1-g3) then the main bird (g4)
-  const g1 = useRef(new Animated.Value(0)).current;
-  const g2 = useRef(new Animated.Value(0)).current;
-  const g3 = useRef(new Animated.Value(0)).current;
-  const g4 = useRef(new Animated.Value(0)).current;
+  const g1 = useSharedValue(0);
+  const g2 = useSharedValue(0);
+  const g3 = useSharedValue(0);
+  const g4 = useSharedValue(0);
   // independent float loops
-  const fb1 = useRef(new Animated.Value(0)).current;
-  const fb2 = useRef(new Animated.Value(0)).current;
-  const fb3 = useRef(new Animated.Value(0)).current;
-  const fb4 = useRef(new Animated.Value(0)).current;
+  const fb1 = useSharedValue(0);
+  const fb2 = useSharedValue(0);
+  const fb3 = useSharedValue(0);
+  const fb4 = useSharedValue(0);
 
   useEffect(() => {
     if (!active) return;
-    fadeAnim.setValue(0);
-    [g1, g2, g3, g4].forEach((g) => g.setValue(0));
-    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.out(Easing.ease) }).start();
-    Animated.stagger(380, [g1, g2, g3, g4].map((g) =>
-      Animated.timing(g, { toValue: 1, duration: 550, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    )).start();
-  }, [active]);
+    fade.value = 0;
+    fade.value = withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) });
+    // The groups arrive one after another, 380 ms apart.
+    [g1, g2, g3, g4].forEach((g, i) => {
+      g.value = 0;
+      g.value = withDelay(i * 380, withTiming(1, { duration: 550, easing: Easing.out(Easing.cubic) }));
+    });
+  }, [active, fade, g1, g2, g3, g4]);
 
   useEffect(() => {
-    const mk = (v: Animated.Value, dur: number, delay = 0) =>
-      Animated.loop(Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(v, { toValue: 1, duration: dur / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(v, { toValue: 0, duration: dur / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]));
-    const anims = [mk(fb1, 2000, 0), mk(fb2, 2300, 400), mk(fb3, 1900, 200), mk(fb4, 2200, 600)];
-    anims.forEach((a) => a.start());
-    return () => anims.forEach((a) => a.stop());
-  }, []);
+    startFloat(fb1, 2000, 0);
+    startFloat(fb2, 2300, 400);
+    startFloat(fb3, 1900, 200);
+    startFloat(fb4, 2200, 600);
+  }, [fb1, fb2, fb3, fb4]);
 
-  const fy = (v: Animated.Value, amp = 7) => v.interpolate({ inputRange: [0, 1], outputRange: [0, -amp] });
-  const slide = (g: Animated.Value) => g.interpolate({ inputRange: [0, 1], outputRange: [sy(12), 0] });
+  const lineStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   return (
     <Pressable style={styles.root} onPress={onPress}>
-      {/* Base gradient — absoluteFill covers the whole screen on any size. */}
-      <LinearGradient
-        colors={['#cfe6ff', '#e4f0ff', '#f3f6fe']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
       {/* Soft radial glow. */}
       <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(360) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
         <Defs>
@@ -106,72 +149,62 @@ export function SplashWelcome3({ onPress, active }: Props) {
       </View>
 
       {/* Dashed connector line between the birds. */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(40), top: sy(182), width: sx(237), height: sy(342), opacity: fadeAnim }}>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: sx(40), top: sy(182), width: sx(237), height: sy(342) }, lineStyle]}>
         <SvgXml xml={BUZZ_LINE_SVG} width={sx(237)} height={sy(342)} />
       </Animated.View>
 
       {/* ── Speech bubbles (behind birds) ── */}
       {/* Bubble 1 — "Is Hongdae packed right now?" (top, rot -9.88).
           Sits just under the top bird so its corner touches it. */}
-      <Animated.View style={[styles.bubbleOuter, {
-        left: sx(16), top: sy(182),
-        opacity: g1, transform: [{ rotate: '-9.88deg' }, { translateY: slide(g1) }, { translateY: fy(fb1, 6) }],
-      }]}>
+      <Rise g={g1} fb={fb1} amp={6} slideIn rotate="-9.88deg" style={[styles.bubbleOuter, { left: sx(16), top: sy(182) }]}>
         <View style={[styles.bubble, styles.bubbleRightTab]}>
           <Text style={styles.bubbleText}>{t('splash.three.bubbles.hongdae')}</Text>
         </View>
-      </Animated.View>
+      </Rise>
 
       {/* Bubble 2 — "Seongsu cafes are blowing up!" (mid, rot 7.58). Anchored by
           its right edge (where the bird perches) so it grows leftward / wraps to
           fit longer translations instead of truncating. */}
-      <Animated.View style={[styles.bubbleOuter, {
-        right: sx(42), top: sy(286), alignItems: 'flex-end',
-        opacity: g2, transform: [{ rotate: '7.58deg' }, { translateY: slide(g2) }, { translateY: fy(fb2, 8) }],
-      }]}>
+      <Rise g={g2} fb={fb2} amp={8} slideIn rotate="7.58deg" style={[styles.bubbleOuter, { right: sx(42), top: sy(286), alignItems: 'flex-end' }]}>
         <View style={[styles.bubble, styles.bubbleLeftTab, { alignItems: 'flex-start' }]}>
           <Text style={[styles.bubbleText, { textAlign: 'left' }]}>{t('splash.three.bubbles.seongsu')}</Text>
         </View>
-      </Animated.View>
+      </Rise>
 
       {/* Bubble 3 — "Bring cash for street food" (bottom, rot -8.88) */}
-      <Animated.View style={[styles.bubbleOuter, {
-        left: sx(45), top: sy(436),
-        opacity: g3, transform: [{ rotate: '-8.88deg' }, { translateY: slide(g3) }, { translateY: fy(fb3, 7) }],
-      }]}>
+      <Rise g={g3} fb={fb3} amp={7} slideIn rotate="-8.88deg" style={[styles.bubbleOuter, { left: sx(45), top: sy(436) }]}>
         <View style={[styles.bubble, styles.bubbleRightTab]}>
           <Text style={styles.bubbleText}>{t('splash.three.bubbles.streetFood')}</Text>
         </View>
-      </Animated.View>
+      </Rise>
 
       {/* ── Birds (SVG, on top of bubbles) ── */}
-      {/* Bird top */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(145), top: sy(111), width: sx(85), height: sy(71), opacity: g1, transform: [{ translateY: fy(fb1, 7) }] }}>
+      <Rise g={g1} fb={fb1} amp={7} style={{ position: 'absolute', left: sx(145), top: sy(111), width: sx(85), height: sy(71) }}>
         <SvgXml xml={BUZZ_BIRD_TOP_SVG} width={sx(85)} height={sy(71)} />
-      </Animated.View>
+      </Rise>
       {/* Bird mid — perches on the bubble's top-right corner (touching it). */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(272), top: sy(238), width: sx(90), height: sy(77), opacity: g2, transform: [{ translateY: fy(fb2, 9) }] }}>
+      <Rise g={g2} fb={fb2} amp={9} style={{ position: 'absolute', left: sx(272), top: sy(238), width: sx(90), height: sy(77) }}>
         <SvgXml xml={BUZZ_BIRD_MID_SVG} width={sx(90)} height={sy(77)} />
-      </Animated.View>
+      </Rise>
       {/* Bird bottom-left — sits on the bubble's top-left corner (touching it). */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(20), top: sy(400), width: sx(87), height: sy(59), opacity: g3, transform: [{ translateY: fy(fb3, 6) }] }}>
+      <Rise g={g3} fb={fb3} amp={6} style={{ position: 'absolute', left: sx(20), top: sy(400), width: sx(87), height: sy(59) }}>
         <SvgXml xml={BUZZ_BIRD_BOTTOM_SVG} width={sx(87)} height={sy(59)} />
-      </Animated.View>
+      </Rise>
       {/* Main bird bottom-right */}
-      <Animated.View pointerEvents="none" style={{ position: 'absolute', left: sx(214), top: sy(440), width: sx(152), height: sy(120), opacity: g4, transform: [{ translateY: fy(fb4, 8) }] }}>
+      <Rise g={g4} fb={fb4} amp={8} style={{ position: 'absolute', left: sx(214), top: sy(440), width: sx(152), height: sy(120) }}>
         <SvgXml xml={BUZZ_MAIN_BIRD_SVG} width={sx(152)} height={sy(120)} />
-      </Animated.View>
+      </Rise>
 
-      {/* Logo */}
       {/* Logo is rendered once, stationary, in OnboardingScreen. */}
 
       {/* Bottom text */}
       <View style={[styles.bottomContent, { bottom: sy(129), paddingHorizontal: sx(16) }]}>
         <View style={styles.textBlock}>
-          <View style={styles.titleRow}>
+          {/* Long translations shrink uniformly to fit one line. */}
+          <AutoFitTitle maxWidth={W - sx(40)}>
             <Text style={styles.titleBold}>{t('splash.three.titleBold')} </Text>
             <Text style={styles.titleMed}>{t('splash.three.titleMed')}</Text>
-          </View>
+          </AutoFitTitle>
           <Text style={styles.subtitle}>{t('splash.three.subtitle')}</Text>
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
@@ -181,7 +214,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#f3f6fe' },
+  root: { width: '100%', height: '100%', overflow: 'hidden' },
   bubbleOuter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   bubble: {
     maxWidth: sx(245),

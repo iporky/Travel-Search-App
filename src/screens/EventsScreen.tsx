@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   BackHandler,
   Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -19,6 +20,12 @@ import { colors, radius, spacing } from '../theme/tokens';
 import { LoadingImage } from '../components/LoadingImage';
 import { ScreenTransition } from '../components/ScreenTransition';
 import { ApiEventCard } from '../components/events/ApiEventCard';
+import { BookmarkButton } from '../components/events/BookmarkButton';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { PressableScale } from '../components/PressableScale';
+
+
+import { shareContent } from '../utils/share';
 import {
   EMPTY_EVENT_FILTERS,
   EventFilters,
@@ -56,6 +63,13 @@ export function EventsScreen({ onFullScreen }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: 'feed' });
   const [detailLoading, setDetailLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  // Section placement lags the bookmark by half a second: a card whose
+  // save_status just flipped stays in its current section (keyed here by its
+  // previous status) so the bookmark's pop is seen where it was tapped, then
+  // the hold is released and the card glides into Wishlist.
+  const [held, setHeld] = useState<Record<string, boolean>>({});
+  const REORDER_DELAY_MS = 500;
   const inFlight = useRef(false);
   const [filters, setFilters] = useState<EventFilters>(EMPTY_EVENT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -189,7 +203,8 @@ export function EventsScreen({ onFullScreen }: Props) {
     const later = new Map<string, { title: string; data: ApiEvent[] }>();
 
     for (const ev of visible) {
-      if (ev.save_status) {
+      const savedForPlacement = held[String(ev.id)] ?? ev.save_status;
+      if (savedForPlacement) {
         wishlist.push(ev);
         continue;
       }
@@ -224,7 +239,7 @@ export function EventsScreen({ onFullScreen }: Props) {
       for (const sec of out) sec.data = [...sec.data].sort((a, b) => b[k] - a[k]);
     }
     return out;
-  }, [visible, filters.sort, language.voiceLocale, t]);
+  }, [visible, filters.sort, language.voiceLocale, t, held]);
 
   // ── Engagement ─────────────────────────────────────────────────────────────
   const patchLocal = (updated: ApiEvent) => {
@@ -236,6 +251,11 @@ export function EventsScreen({ onFullScreen }: Props) {
   const toggle = async (ev: ApiEvent, field: 'like_status' | 'save_status') => {
     const nextVal = !ev[field];
     const countKey = field === 'like_status' ? 'like_count' : 'save_count';
+    if (field === 'save_status') {
+      const key = String(ev.id);
+      setHeld((h) => ({ ...h, [key]: !!ev.save_status }));
+      setTimeout(() => setHeld((h) => { const n = { ...h }; delete n[key]; return n; }), REORDER_DELAY_MS);
+    }
     patchLocal({ ...ev, [field]: nextVal, [countKey]: Math.max(0, ev[countKey] + (nextVal ? 1 : -1)) });
     if (field === 'like_status') track.eventLike(ev.id, nextVal);
     else track.eventSave(ev.id, nextVal);
@@ -257,6 +277,19 @@ export function EventsScreen({ onFullScreen }: Props) {
       console.warn('[Events] detail failed', e?.message ?? e);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  // Same flow as the website: ask the backend for a short share_url for this
+  // event, then hand it to the OS share sheet. Guarded so a double-tap can't
+  // mint twice; a failure still opens the sheet with the long link.
+  const shareThisEvent = async (ev: ApiEvent) => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await shareContent({ kind: 'event', id: ev.id, title: ev.text });
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -289,6 +322,8 @@ export function EventsScreen({ onFullScreen }: Props) {
             onToggleSave={() => toggle(ev, 'save_status')}
             onBookTaxi={() => bookTaxi(ev)}
             onOpenSource={() => openSource(ev)}
+            onShare={() => shareThisEvent(ev)}
+            sharing={sharing}
           />
         </ScreenTransition>
       );
@@ -322,9 +357,9 @@ export function EventsScreen({ onFullScreen }: Props) {
       ) : error && events.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.muted}>{error}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => fetchPage(1, true)}>
+          <PressableScale style={styles.retryBtn} onPress={() => fetchPage(1, true)}>
             <Text style={styles.retryText}>{t('events.retry')}</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <SectionList
@@ -402,14 +437,20 @@ export function EventsScreen({ onFullScreen }: Props) {
               .slice(0, sections.findIndex((s) => s.key === section.key))
               .reduce((n, s) => n + s.data.length, 0);
             return (
-              <ApiEventCard
-                event={item}
-                index={before + index}
-                width={cardW}
-                onPress={() => openDetail(item)}
-                onToggleLike={() => toggle(item, 'like_status')}
-                onToggleSave={() => toggle(item, 'save_status')}
-              />
+              <Animated.View
+                layout={LinearTransition.duration(320)}
+                entering={FadeIn.duration(220)}
+                exiting={FadeOut.duration(160)}
+              >
+                <ApiEventCard
+                  event={item}
+                  index={before + index}
+                  width={cardW}
+                  onPress={() => openDetail(item)}
+                  onToggleLike={() => toggle(item, 'like_status')}
+                  onToggleSave={() => toggle(item, 'save_status')}
+                />
+              </Animated.View>
             );
           }}
           ListEmptyComponent={
@@ -487,6 +528,8 @@ function EventDetail({
   onToggleSave,
   onBookTaxi,
   onOpenSource,
+  onShare,
+  sharing,
 }: {
   event: ApiEvent;
   loading: boolean;
@@ -495,6 +538,8 @@ function EventDetail({
   onToggleSave: () => void;
   onBookTaxi: () => void;
   onOpenSource: () => void;
+  onShare: () => void;
+  sharing: boolean;
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -504,13 +549,27 @@ function EventDetail({
         <Pressable style={styles.backBtn} hitSlop={8} onPress={onBack}>
           <Ionicons name="chevron-back" size={24} color={colors.gray[1300]} />
         </Pressable>
-        <Pressable hitSlop={8} onPress={onToggleSave}>
-          <Ionicons
-            name={event.save_status ? 'bookmark' : 'bookmark-outline'}
+        <View style={styles.detailTopActions}>
+          {/* Mints a short link, then opens the OS share sheet. The glyph
+              follows each platform's own share affordance. */}
+          <Pressable hitSlop={8} onPress={onShare} disabled={sharing}>
+            {sharing ? (
+              <ActivityIndicator size="small" color={colors.icon.primary} />
+            ) : (
+              <Ionicons
+                name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
+                size={24}
+                color={colors.icon.primary}
+              />
+            )}
+          </Pressable>
+          <BookmarkButton
+            saved={!!event.save_status}
             size={24}
-            color={event.save_status ? colors.blue[500] : colors.icon.primary}
+            idleColor={colors.icon.primary}
+            onPress={onToggleSave}
           />
-        </Pressable>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.detailContent}>
@@ -560,10 +619,10 @@ function EventDetail({
       </ScrollView>
 
       <View style={[styles.ctaBar, { paddingBottom: spacing[3] + insets.bottom }]}>
-        <Pressable style={styles.taxiBtn} onPress={onBookTaxi}>
+        <PressableScale style={styles.taxiBtn} onPress={onBookTaxi}>
           <Ionicons name="car-outline" size={20} color={colors.gray[100]} />
           <Text style={styles.taxiText}>{t('events.bookTaxi')}</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
@@ -649,6 +708,7 @@ const styles = StyleSheet.create({
   // Detail
   detailTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[3], paddingVertical: spacing[2] },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  detailTopActions: { flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
   detailContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[10], gap: spacing[3] },
   hero: { width: '100%', height: 220, borderRadius: radius.xl, backgroundColor: colors.gray[400] },
   hostRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
@@ -662,10 +722,12 @@ const styles = StyleSheet.create({
   metaText: { flex: 1, fontFamily: 'NationalPark_500Medium', fontSize: 14, lineHeight: 20, color: colors.gray[1000] },
   statsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[6], paddingTop: spacing[2], borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.surface.subtle },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 14, color: colors.text.primary },
+  // includeFontPadding: Android pads the line box asymmetrically, which sat these
+  // labels a couple of px below the icons they share a row with.
+  statText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 14, color: colors.text.primary, includeFontPadding: false, textAlignVertical: 'center' },
   sourceBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
-  sourceText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 14, color: colors.blue[500] },
+  sourceText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 14, color: colors.blue[500], includeFontPadding: false, textAlignVertical: 'center' },
   ctaBar: { paddingHorizontal: spacing[5], paddingTop: spacing[3], borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.surface.subtle },
   taxiBtn: { height: 52, borderRadius: radius.full, backgroundColor: colors.blue[500], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
-  taxiText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 16, letterSpacing: -0.16, color: colors.gray[100] },
+  taxiText: { fontFamily: 'NationalPark_600SemiBold', fontSize: 16, lineHeight: 20, letterSpacing: -0.16, color: colors.gray[100], includeFontPadding: false, textAlignVertical: 'center' },
 });

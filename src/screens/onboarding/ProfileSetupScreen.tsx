@@ -5,28 +5,19 @@ import {
   Dimensions,
   Image,
   ImageSourcePropType,
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { PressableScale as Pressable } from '../../components/PressableScale';
 import { useTranslation } from 'react-i18next';
 import { KeyboardStickyView } from '../../components/KeyboardStickyView';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radius } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
-import ProgressBar from '../../components/ProgressBar';
-
-// airplane.png is a freshly-added PNG — on Android load it by resource name
-// (require()'s numeric id renders blank), keeping the require() so Metro bundles it.
-const PLANE_MOD = require('../../../assets/onboarding/airplane.png') as ImageSourcePropType;
-const PLANE: ImageSourcePropType =
-  Platform.OS === 'android' ? { uri: 'assets_onboarding_airplane' } : PLANE_MOD;
-
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
 const DESIGN_H = 812;
@@ -38,25 +29,18 @@ const DEFAULT_AVATAR = onboardingSource(
   'bird-card',
 );
 
-const TAKEN_USERNAMES = new Set([
-  'admin',
-  'root',
-  'konnect',
-  'sallytheking',
-  'hotdog193',
-  'testuser',
-]);
-
 type Availability = 'idle' | 'checking' | 'available' | 'taken';
 
 interface Props {
-  progress: number;
   onBack: () => void;
   onConfirm: (username: string, photoUri?: string | null) => void;
   initialValue?: string;
   initialPhotoUrl?: string | null;
-  /** Reuse this screen from Profile as an editor: no progress bar, "Save" CTA. */
+  /** Reuse this screen from Profile as an editor: "Save" CTA. */
   editMode?: boolean;
+  /** A name the backend rejected as taken, with the alternatives it offered. */
+  takenUsername?: string | null;
+  takenSuggestions?: string[];
 }
 
 function sanitizeUsername(value: string): string {
@@ -80,18 +64,32 @@ function generateSuggestions(base: string): string[] {
   return Array.from(new Set(candidates)).slice(0, 3);
 }
 
-async function checkUsernameAvailability(username: string): Promise<boolean> {
-  await new Promise((resolve) => setTimeout(resolve, 280));
-  return !TAKEN_USERNAMES.has(username.toLowerCase());
+/**
+ * Whether the name is free.
+ *
+ * There is no endpoint that can answer this: the backend exposes no username
+ * lookup or filter (checked against its OpenAPI schema — 68 routes, none for
+ * usernames), and /api/v1/onboarding/{firebase_id} takes a Firebase id, so
+ * probing it with a name returns 403 "not your profile" for *every* name,
+ * free or not. Uniqueness is therefore only knowable where the backend
+ * enforces it: the create call, which answers 409 with suggestions. The
+ * parent feeds that verdict back in via `takenUsername`.
+ *
+ * When a real availability endpoint lands, call it here — the debounce and
+ * the stale-response guard below are already wired for it.
+ */
+async function checkUsernameAvailability(_username: string): Promise<boolean> {
+  return true;
 }
 
 export function ProfileSetupScreen({
-  progress,
   onBack,
   onConfirm,
   initialValue = '',
   initialPhotoUrl,
   editMode = false,
+  takenUsername = null,
+  takenSuggestions = [],
 }: Props) {
   const { t } = useTranslation();
   const [username, setUsername] = useState(initialValue);
@@ -144,14 +142,6 @@ export function ProfileSetupScreen({
     ]);
   };
 
-  // Progress bar — identical to the questionnaire (shared ProgressBar + plane).
-  const [trackWidth, setTrackWidth] = useState(0);
-  const displayProgress = Math.max(0.08, Math.min(0.96, progress));
-  const pct = `${displayProgress * 100}%` as `${number}%`;
-  const fillTouchOffset = sx(6);
-  const touchProgress = trackWidth > 0 ? fillTouchOffset / trackWidth : 0;
-  const fillProgress = Math.min(0.96, displayProgress + touchProgress);
-
   const trimmed = username.trim();
   const ruleLength = trimmed.length >= 4 && trimmed.length <= 20;
   const ruleEnglishLettersAndNumbers = /^[A-Za-z0-9._]*$/.test(trimmed);
@@ -170,6 +160,10 @@ export function ProfileSetupScreen({
     (!ruleNoSpecialExcept && trimmed.length > 0) ||
     (!ruleStartsWithLetter && trimmed.length > 0);
 
+  // Debounced availability check: every keystroke restarts the timer, so only
+  // a pause in typing spends a request, and `requestSeq` drops any answer that
+  // arrives after the user has typed on — otherwise a slow reply for an older
+  // name could overwrite the verdict for the current one.
   useEffect(() => {
     if (!trimmed || !allRulesPass) {
       setAvailability('idle');
@@ -180,6 +174,13 @@ export function ProfileSetupScreen({
     requestSeq.current += 1;
     const currentReq = requestSeq.current;
     setAvailability('checking');
+
+    // A name the create call already rejected stays flagged until it is edited.
+    if (takenUsername && trimmed.toLowerCase() === takenUsername.toLowerCase()) {
+      setAvailability('taken');
+      setSuggestions(takenSuggestions.length ? takenSuggestions : generateSuggestions(trimmed));
+      return;
+    }
 
     const timer = setTimeout(async () => {
       try {
@@ -196,10 +197,12 @@ export function ProfileSetupScreen({
         if (requestSeq.current !== currentReq) return;
         setAvailability('idle');
       }
-    }, 240);
+      // 400ms rather than the 240 the local mock used: this is a round trip
+      // now, and it keeps a fast typist from firing a request per character.
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [trimmed, allRulesPass]);
+  }, [trimmed, allRulesPass, takenUsername, takenSuggestions]);
 
   const inputBorderColor = useMemo(() => {
     if (!trimmed) return 'transparent';
@@ -219,20 +222,6 @@ export function ProfileSetupScreen({
         <Text style={styles.headerTitle}>{editMode ? t('onboarding.editProfile') : t('onboarding.createProfile')}</Text>
       </View>
 
-      {!editMode ? (
-        <View
-          style={styles.progressTrack}
-          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-        >
-          <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} width={trackWidth} />
-          <View style={[styles.planeWrap, { left: pct }]} pointerEvents="none">
-            <View style={styles.planeGlow}>
-              <Image source={PLANE} style={styles.planeImg} resizeMode="contain" />
-            </View>
-          </View>
-        </View>
-      ) : null}
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -240,23 +229,28 @@ export function ProfileSetupScreen({
         showsVerticalScrollIndicator={false}
       >
       <View style={styles.profileBlock}>
-        <Pressable style={styles.avatarWrap} onPress={choosePhoto} hitSlop={8}>
-          <Image
-            source={
-              pickedPhoto
-                ? { uri: pickedPhoto }
-                : initialPhotoUrl && !photoFailed
-                ? { uri: initialPhotoUrl }
-                : DEFAULT_AVATAR
-            }
-            style={styles.avatar}
-            resizeMode="cover"
-            onError={() => setPhotoFailed(true)}
-          />
-          <View style={styles.cameraBadge}>
-            <Ionicons name="camera" size={sx(14)} color={colors.gray[100]} />
-          </View>
-        </Pressable>
+        {/* The badge is a sibling of the clipped circle, not a child: inside it
+            the circle's overflow clip cut the badge's corner off. Same badge as
+            the Profile page (blue, white camera, 2px surface ring). */}
+        <View style={styles.avatarArea}>
+          <Pressable style={styles.avatarWrap} onPress={choosePhoto} hitSlop={8}>
+            <Image
+              source={
+                pickedPhoto
+                  ? { uri: pickedPhoto }
+                  : initialPhotoUrl && !photoFailed
+                  ? { uri: initialPhotoUrl }
+                  : DEFAULT_AVATAR
+              }
+              style={styles.avatar}
+              resizeMode="cover"
+              onError={() => setPhotoFailed(true)}
+            />
+          </Pressable>
+          <Pressable style={styles.cameraBadge} onPress={choosePhoto} hitSlop={8}>
+            <MaterialIcons name="photo-camera" size={18} color={colors.surface.default} />
+          </Pressable>
+        </View>
 
         <View style={[styles.inputWrap, { borderColor: inputBorderColor }]}> 
           <TextInput
@@ -379,44 +373,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.24,
   },
 
-  progressTrack: {
-    marginTop: sy(12),
-    // Inset to match the questionnaire progress bar (paddingHorizontal sx(20)),
-    // instead of spanning the whole screen width.
-    marginHorizontal: sx(20),
-    height: sy(8),
-    borderRadius: radius.full,
-    justifyContent: 'center',
-    overflow: 'visible',
-    position: 'relative',
-  },
-  planeWrap: {
-    position: 'absolute',
-    // Pull the plane back left so its (transparently-padded) body sits on the
-    // fill end with no gap — matches the questionnaire progress bar.
-    marginLeft: -sx(18),
-    zIndex: 4,
-  },
-  planeGlow: {
-    shadowColor: '#527dff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-  },
-  planeImg: {
-    width: sx(56),
-    height: sx(56),
-    backgroundColor: 'transparent',
-  },
-
   profileBlock: {
     marginTop: sy(72),
     paddingHorizontal: sx(20),
   },
+  avatarArea: { width: sx(100), height: sx(100), alignSelf: 'center' },
   avatarWrap: {
     width: sx(100),
     height: sx(100),
-    alignSelf: 'center',
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.gray[200],
@@ -428,18 +392,19 @@ const styles = StyleSheet.create({
     width: sx(100),
     height: sx(100),
   },
+  // Mirrors ProfileMain.avatarBadge so the two screens read as one control.
   cameraBadge: {
     position: 'absolute',
-    right: sx(4),
-    bottom: sx(4),
-    width: sx(26),
-    height: sx(26),
-    borderRadius: radius.full,
-    backgroundColor: colors.gray[600],
+    right: 0,
+    bottom: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.blue[500],
+    borderWidth: 2,
+    borderColor: colors.surface.default,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.gray[200],
   },
 
   inputWrap: {

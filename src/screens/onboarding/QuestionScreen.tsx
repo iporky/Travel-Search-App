@@ -1,22 +1,32 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   Image,
   ImageSourcePropType,
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { PressableScale as Pressable } from '../../components/PressableScale';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  SharedValue,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import { colors, radius } from '../../theme/tokens';
 import { OnboardingQuestion } from '../../api/onboarding';
 import { onboardingSource } from '../../assets/onboardingAssets';
-import ProgressBar from '../../components/ProgressBar';
 import { ONBOARDING_ICON_SOURCES, AVATAR_SOURCE } from '../../assets/onboardingIcons';
+import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -26,11 +36,6 @@ const sy = (n: number) => (n * H) / DESIGN_H;
 
 // Round mascot bird — question-asking avatar in the bubble. 512px PNG
 // (AVATAR_SOURCE) rendered with native <Image>.
-// airplane.png is a freshly-replaced PNG, so on Android load it by resource name
-// (same fix as the icons) instead of the require()-number that renders blank.
-const PLANE_MOD = require('../../../assets/onboarding/airplane.png') as ImageSourcePropType;
-const PLANE: ImageSourcePropType =
-  Platform.OS === 'android' ? { uri: 'assets_onboarding_airplane' } : PLANE_MOD;
 
 const BACK_BTN = onboardingSource(
   require('../../../assets/onboarding/chevron-left.png') as ImageSourcePropType,
@@ -59,7 +64,6 @@ interface Props {
   onToggle: (optionId: string) => void;
   onConfirm: () => void;
   onBack: () => void;
-  progress: number;
   canGoBack: boolean;
 }
 
@@ -69,22 +73,33 @@ export function QuestionScreen({
   onToggle,
   onConfirm,
   onBack,
-  progress,
   canGoBack,
 }: Props) {
   const layout = question.layout ?? 'list';
   const isMulti = question.type === 'multi';
   const canConfirm = selected.length > 0;
-  const [trackWidth, setTrackWidth] = useState(0);
-  const displayProgress = Math.max(0.08, Math.min(0.96, progress));
-  const pct = `${displayProgress * 100}%` as `${number}%`;
-  const fillTouchOffset = sx(6);
-  const touchProgress = trackWidth > 0 ? fillTouchOffset / trackWidth : 0;
-  const fillProgress = Math.min(0.96, displayProgress + touchProgress);
+  // Each step mounts a fresh page (the previous one stays up while it fades
+  // out), so the bird Lottie decodes anew here. Keep it invisible until its
+  // frames are ready and fade it in, rather than letting it pop mid-transition.
+  const bird = useSharedValue(0);
+  const birdShown = useRef(false);
+  const revealBird = () => {
+    if (birdShown.current) return;
+    birdShown.current = true;
+    bird.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.ease) });
+  };
+  useEffect(() => {
+    // Should the load callback not arrive, still show the bird.
+    const fallback = setTimeout(revealBird, 900);
+    return () => clearTimeout(fallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const birdStyle = useAnimatedStyle(() => ({ opacity: bird.value }));
 
   return (
     <View style={styles.root}>
-      {/* Header: back + progress bar */}
+      {/* Header: back button only — the step progress indicator was removed;
+          a new loader will take its place. */}
       <View style={styles.header}>
         <Pressable
           onPress={onBack}
@@ -94,23 +109,29 @@ export function QuestionScreen({
         >
           <Image source={BACK_BTN} style={styles.backBtn} resizeMode="contain" />
         </Pressable>
-
-        <View
-          style={styles.progressTrack}
-          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        >
-          <ProgressBar progress={fillProgress} dashStartProgress={displayProgress} width={trackWidth} />
-          <View style={[styles.planeWrap, { left: pct }]} pointerEvents="none">
-            <View style={styles.planeGlow}>
-              <Image source={PLANE} style={styles.planeImg} resizeMode="contain" />
-            </View>
-          </View>
-        </View>
       </View>
 
-      {/* Question bubble — mascot bird on the left */}
+      {/* Question bubble — walking-bird Lottie on the left (Onboarding_Purpose
+          12320:52339 "loading bird", 79×62; frames carry their own bg). */}
       <View style={styles.bubbleRow}>
-        <Image source={AVATAR_SOURCE} style={styles.birdAvatar} resizeMode="contain" />
+        {/* Loading bird beside the question. Its frames carry a flat
+            #eaf4fd background; the feather dissolves that into the screen's
+            gradient at this height (~#ecf5ff) — the designer's blur layer. */}
+        <View style={styles.birdLottieBox}>
+          {/* Soft halo under the frames' own #eaf4fd — no edge anywhere. */}
+          <LottieHalo color="#eaf4fd" width={sx(79)} height={sx(62)} spread={sx(18)} />
+          <Animated.View style={[styles.birdLottie, birdStyle]}>
+            <LottieView
+              source={require('../../../assets/lottie/question-bird.json')}
+              style={styles.birdLottie}
+              autoPlay
+              loop
+              resizeMode="cover"
+              onAnimationLoaded={revealBird}
+            />
+          </Animated.View>
+          <LottieEdgeFeather color="#eaf4fd" top={0.1} bottom={0.12} side={0.1} />
+        </View>
         <View style={styles.bubble}>
           <Text style={styles.bubbleText}>{question.prompt}</Text>
         </View>
@@ -249,6 +270,48 @@ function renderGrid(
 const WHEEL_ITEM_H = sy(64);
 const WHEEL_VISIBLE = 5; // odd → one exact centre row
 
+/** One drum row: fades, shrinks and tilts away from the centre as the wheel
+    scrolls — a worklet on the scroll offset, so it tracks the finger on the
+    UI thread. */
+function WheelRow({
+  index,
+  scrollY,
+  selected,
+  label,
+  onPress,
+}: {
+  index: number;
+  scrollY: SharedValue<number>;
+  selected: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  const style = useAnimatedStyle(() => {
+    const inputRange = [
+      (index - 2) * WHEEL_ITEM_H,
+      (index - 1) * WHEEL_ITEM_H,
+      index * WHEEL_ITEM_H,
+      (index + 1) * WHEEL_ITEM_H,
+      (index + 2) * WHEEL_ITEM_H,
+    ];
+    return {
+      opacity: interpolate(scrollY.value, inputRange, [0.16, 0.42, 1, 0.42, 0.16], Extrapolation.CLAMP),
+      transform: [
+        { perspective: 800 },
+        { rotateX: `${interpolate(scrollY.value, inputRange, [42, 24, 0, -24, -42], Extrapolation.CLAMP)}deg` },
+        { scale: interpolate(scrollY.value, inputRange, [0.8, 0.9, 1, 0.9, 0.8], Extrapolation.CLAMP) },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.wheelItem, style]}>
+      <Pressable style={styles.wheelItemPress} onPress={onPress}>
+        <Text style={[styles.wheelText, selected && styles.wheelTextSel]}>{label}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function WheelPicker({
   question,
   selected,
@@ -259,8 +322,11 @@ function WheelPicker({
   onToggle: (id: string) => void;
 }) {
   const options = question.options;
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const scrollRef = useRef<any>(null);
+  const scrollY = useSharedValue(0);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const onWheelScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
   const onToggleRef = useRef(onToggle);
   onToggleRef.current = onToggle;
 
@@ -296,61 +362,25 @@ function WheelPicker({
           bounces={false}
           overScrollMode="never"
           contentContainerStyle={{ paddingVertical: WHEEL_ITEM_H * ((WHEEL_VISIBLE - 1) / 2) }}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
-          )}
+          onScroll={onWheelScroll}
           scrollEventThrottle={16}
           onMomentumScrollEnd={(e) => settleOnIndex(e.nativeEvent.contentOffset.y)}
           onScrollEndDrag={(e) => settleOnIndex(e.nativeEvent.contentOffset.y)}
           style={{ height: WHEEL_ITEM_H * WHEEL_VISIBLE }}
         >
-          {options.map((opt, i) => {
-            const inputRange = [
-              (i - 2) * WHEEL_ITEM_H,
-              (i - 1) * WHEEL_ITEM_H,
-              i * WHEEL_ITEM_H,
-              (i + 1) * WHEEL_ITEM_H,
-              (i + 2) * WHEEL_ITEM_H,
-            ];
-            const opacity = scrollY.interpolate({
-              inputRange,
-              outputRange: [0.16, 0.42, 1, 0.42, 0.16],
-              extrapolate: 'clamp',
-            });
-            const scale = scrollY.interpolate({
-              inputRange,
-              outputRange: [0.8, 0.9, 1, 0.9, 0.8],
-              extrapolate: 'clamp',
-            });
-            const rotateX = scrollY.interpolate({
-              inputRange,
-              outputRange: ['42deg', '24deg', '0deg', '-24deg', '-42deg'],
-              extrapolate: 'clamp',
-            });
-            const isSel = selected.includes(opt.id);
-            return (
-              <Animated.View
-                key={opt.id}
-                style={[
-                  styles.wheelItem,
-                  { opacity, transform: [{ perspective: 800 }, { rotateX }, { scale }] },
-                ]}
-              >
-                <Pressable
-                  style={styles.wheelItemPress}
-                  onPress={() => {
-                    scrollRef.current?.scrollTo({ y: i * WHEEL_ITEM_H, animated: true });
-                    onToggle(opt.id);
-                  }}
-                >
-                  <Text style={[styles.wheelText, isSel && styles.wheelTextSel]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              </Animated.View>
-            );
-          })}
+          {options.map((opt, i) => (
+            <WheelRow
+              key={opt.id}
+              index={i}
+              scrollY={scrollY}
+              selected={selected.includes(opt.id)}
+              label={opt.label}
+              onPress={() => {
+                scrollRef.current?.scrollTo({ y: i * WHEEL_ITEM_H, animated: true });
+                onToggle(opt.id);
+              }}
+            />
+          ))}
         </Animated.ScrollView>
       </View>
     </View>
@@ -386,37 +416,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
 
-  progressTrack: {
-    flex: 1,
-    height: sy(8),
-    borderRadius: radius.full,
-    overflow: 'visible',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  planeWrap: {
-    position: 'absolute',
-    // The airplane PNG has ~20% transparent padding on its left, so its visible
-    // body sits well to the right of the box origin (= the progress head), leaving
-    // a gap where the dashes show through. Pull it back left so the plane sits on
-    // the fill end.
-    marginLeft: -sx(18),
-    zIndex: 4,
-  },
-  planeGlow: {
-    // Blue halo glow (iOS only). On Android `elevation` is intentionally omitted:
-    // it casts a rectangular shadow around the image bounds, which looked like a
-    // box behind the plane. zIndex alone keeps the plane above the dashes.
-    shadowColor: '#527dff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
-  },
-  planeImg: {
-    width: sx(56),
-    height: sx(56),
-    backgroundColor: 'transparent',
-  },
 
   // Question bubble
   bubbleRow: {
@@ -428,6 +427,11 @@ const styles = StyleSheet.create({
     paddingBottom: sy(12),
   },
   birdAvatar: { width: sx(56), height: sx(56) },
+  // Loading-bird Lottie slot (79×62 design px, 12469:86055). The source is
+  // 720×554 — the same 1.27:1 the slot is — so "cover" fills it with no crop
+  // worth speaking of.
+  birdLottieBox: { width: sx(79), height: sx(62) },
+  birdLottie: { width: '100%', height: '100%' },
   bubble: {
     // Hug the text: shrink to content, wrap only when it would exceed the row.
     flexShrink: 1,

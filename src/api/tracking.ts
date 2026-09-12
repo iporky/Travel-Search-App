@@ -87,6 +87,82 @@ export async function trackEvent(body: TrackEventBody): Promise<void> {
   }
 }
 
+/** POST /tracking/events response (TrackingEventResponse). */
+export interface TrackingEventResponse {
+  logged: boolean;
+  event_id: string;
+  created_at: string;
+  /** Set only for a well-formed event_type "search_query" row; null otherwise. */
+  search_query_response_id?: string | null;
+}
+
+/**
+ * Persist a finished search so it can be shared later, and return the id that
+ * makes that possible.
+ *
+ * `search_query_response_id` is the {response_id} for
+ * POST /api/v1/share/search/{response_id}, and this is the ONLY place the
+ * client is ever handed it — it is not in the SSE stream (that carries the
+ * pipeline's own `request_id`, a different value that the share endpoint
+ * rejects). The only other source is GET /api/v1/history/search, which needs a
+ * login.
+ *
+ * Two things here are easy to get wrong:
+ *  • No Authorization header. This endpoint is unauthenticated and ignores one;
+ *    attribution to a signed-in user goes through `provider_id` in the body.
+ *  • `visitor_id` is what makes an anonymous search shareable. The stored search
+ *    is attributed to whoever this call says made it, so recording without it
+ *    leaves the search owned by nobody and POST /share/search/{id} answers 404
+ *    for the very person who just ran it. Verified on dev: same visitor_id here
+ *    and on the share call => 200; omitted here => 404.
+ *
+ * The metadata shape (request + verbatim response array + response_status)
+ * mirrors the infra-side recorder (scripts/lambda/query_stream_recorder) and
+ * must match exactly, or the id comes back null.
+ */
+export async function recordSearchResponse(args: {
+  sessionId: string;
+  request: unknown;
+  /** Every stream event, verbatim and in arrival order. */
+  response: unknown[];
+  status?: number;
+}): Promise<string | null> {
+  const url = `${AUTH_API_URL}/api/v1/tracking/events?platform=${Platform.OS}`;
+  const [visitorId, deviceId] = await Promise.all([
+    getVisitorId(),
+    DeviceInfo.getUniqueId().catch(() => null),
+  ]);
+  const providerId = auth().currentUser?.uid ?? undefined;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event_type: 'search_query',
+      source_type: 'search',
+      source_id: args.sessionId,
+      // Omitted entirely when signed out — absent, not null.
+      ...(providerId ? { provider_id: providerId } : {}),
+      visitor_id: visitorId,
+      ...(deviceId ? { device_id: deviceId } : {}),
+      metadata: {
+        request: args.request,
+        response: args.response,
+        response_status: args.status ?? 200,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Search not recorded: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as TrackingEventResponse;
+  console.log('[api] search recorded → search_query_response_id', data.search_query_response_id ?? null);
+  return data.search_query_response_id ?? null;
+}
+
 /** One page-view row (source_type page_view; page_path required by contract). */
 export function trackPageView(pagePath: string, referrer?: string | null): Promise<void> {
   return trackEvent({
@@ -124,6 +200,14 @@ export const track = {
   // Rows 7–12: one row per edited field; channel names the field.
   profileEdit: (eventType: ProfileEditEventType, channel: TrackingChannel) =>
     trackEvent({ event_type: eventType, source_type: 'profile', channel }),
+  // Home cashback banner tap — monitoring only, channel always null (web
+  // Home.js handleBannerClick parity).
+  receiptBannerClick: () =>
+    trackEvent({ event_type: 'receipt_banner_click', source_type: 'receipt_banner_click' }),
+  // Logged after a receipt upload SUCCEEDS, never on the click (web parity —
+  // a failed upload is not a receipt uploaded).
+  receiptUpload: () =>
+    trackEvent({ event_type: 'receipt_upload', source_type: 'receipt_upload' }),
   feedbackSubmitted: (kind: string) =>
     trackEvent({ event_type: 'feedback_submitted', source_type: 'feedback', metadata: { kind } }),
 };

@@ -12,6 +12,7 @@ import DeviceInfo from 'react-native-device-info';
 import { Platform } from 'react-native';
 import { AUTH_API_URL } from '../config';
 import { track } from './tracking';
+import { UsernameTakenError, parseUsernameSuggestions } from './errors';
 import {
   DESTINATION_FROM_BACKEND,
   DESTINATION_TO_BACKEND,
@@ -284,6 +285,26 @@ async function onboardingAuthContext() {
   return { fbUser, firebaseToken, deviceId, uid: fbUser.uid, email: fbUser.email ?? '' };
 }
 
+/**
+ * The username the user picked on the username screen. The backend enforces a
+ * globally unique username, so the name has to be one the user actually chose
+ * and saw confirmed as free — deriving it from the account silently collides
+ * with other people and every save then fails.
+ */
+let chosenUsername: string | null = null;
+
+/** Record the name the user settled on, so onboarding writes carry it. */
+export function setChosenUsername(name: string): void {
+  chosenUsername = name.trim() || null;
+}
+
+/** Account-derived fallback, used only until the user picks a name. */
+function baseUsername(fbUser: FirebaseAuthTypes.User): string {
+  return (fbUser.email?.split('@')[0] || fbUser.displayName || fbUser.uid)
+    .replace(/\s+/g, '_')
+    .toLowerCase();
+}
+
 /** Build the request body (shared by POST create and PATCH update). */
 function buildOnboardingBody(
   answers: Record<string, string[]>,
@@ -311,9 +332,9 @@ function buildOnboardingBody(
   if (people) context.group_size = Number(people);
 
   const purposeId = a['purpose']?.[0];
-  const username = (fbUser.email?.split('@')[0] || fbUser.displayName || fbUser.uid)
-    .replace(/\s+/g, '_')
-    .toLowerCase();
+  // Prefer a username already settled on: the one the stored record carries,
+  // or the one a 409 retry minted. Only fall back to deriving it fresh.
+  const username = chosenUsername ?? lastKnownRecord?.username ?? baseUsername(fbUser);
 
   return {
     username,
@@ -455,23 +476,34 @@ export async function saveOnboarding(
       ? `${AUTH_API_URL}/api/v1/onboarding/?device_id=${encodeURIComponent(deviceId)}`
       : `${AUTH_API_URL}/api/v1/onboarding/${encodeURIComponent(uid)}?device_id=${encodeURIComponent(deviceId)}`;
 
-  console.log(`[api] saveOnboarding → ${args.method} ${url}`, JSON.stringify(body));
+  const send = (payload: object) =>
+    fetch(url, {
+      method: args.method,
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${firebaseToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
-  const res = await fetch(url, {
-    method: args.method,
-    headers: {
-      accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${firebaseToken}`,
-    },
-    body: JSON.stringify(body),
-  });
+  console.log(`[api] saveOnboarding → ${args.method} ${url}`, JSON.stringify(body));
+  const res = await send(body);
+
+  // A create collides when the username is already someone else's. That is the
+  // username screen's business, not something to paper over here: it throws
+  // carrying the backend's suggestions so the caller can send the user back to
+  // pick another name.
+  if (res.status === 409) {
+    const text = await res.text().catch(() => '');
+    throw new UsernameTakenError(body.username, parseUsernameSuggestions(text));
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`saveOnboarding(${args.method}) failed: HTTP ${res.status} ${text.slice(0, 200)}`);
   }
-  console.log(`[api] saveOnboarding(${args.method}) ✓`);
+  console.log(`[api] saveOnboarding(${args.method}) ✓ as "${body.username}"`);
 
   // Contract rows 9a–9h: report which onboarding fields this save changed.
   if (args.method === 'PATCH' && lastKnownRecord) {

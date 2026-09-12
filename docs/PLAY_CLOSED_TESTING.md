@@ -75,7 +75,7 @@ justified in the Data Safety form (below).
 ### 0.6 Content is mock data **[YOU — product decision]**
 `USE_MOCKS = true`. Every Buzz feature (Ask / Moments / Tips / Drops / Vibes)
 shows invented posts from invented users with placeholder photos. Auth points at
-`test.konnect.kr`, search at `dev.konnect.kr`.
+`staging.konnect.kr` (all API hosts derive from one `API_HOST` in `src/config/index.ts`).
 
 Acceptable for **closed testing with your own team**. Not acceptable for open
 testing or production.
@@ -158,7 +158,7 @@ Based on what the code actually does:
 - **Audio** — `RECORD_AUDIO` for voice search. If audio is only processed
   on-device by the speech recognizer and never transmitted, declare it as
   **not collected** but be certain before you claim that.
-- **App activity / search history** — search queries go to `dev.konnect.kr`.
+- **App activity / search history** — search queries go to `staging.konnect.kr` (or whatever `API_HOST` is set to).
 - **Device identifiers** — `device_id` is sent to your auth backend.
 - Encryption in transit: **Yes** (all endpoints are HTTPS).
 - Deletion: you must state whether users can request deletion, and Play now
