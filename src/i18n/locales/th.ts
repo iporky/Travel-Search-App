@@ -557,6 +557,7 @@ const th = {
     error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
     interpretedAs: 'ตีความว่า',
     searchAsTyped: 'ค้นหาตามที่พิมพ์',
+    followUpPlaceholder: 'ถามคำถามเพิ่มเติม',
   },
   signIn: {
     line1: 'ให้เราพาคุณ',

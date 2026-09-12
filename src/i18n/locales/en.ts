@@ -557,10 +557,11 @@ const en = {
     title: 'Answer',
     thinking: 'Thinking...',
     sources: 'Sources',
-    related: 'Related questions',
+    related: 'Related Questions',
     error: 'Something went wrong. Please try again.',
     interpretedAs: 'Interpreted as',
     searchAsTyped: 'Search as typed',
+    followUpPlaceholder: 'Ask for a follow up question',
   },
   signIn: {
     line1: "Let's get you",

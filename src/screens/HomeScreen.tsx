@@ -293,7 +293,10 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
       {/* New-user home is intentionally clean (greeting → bird → search pill);
           quick suggestions live in the search overlay's "Trending" list. */}
 
-      {!composerExpanded ? (
+      {/* Neither search surface is rendered under an open results chat: an
+          invisible focusable field there is where Android parks focus the
+          moment the chat's own field lets go of it. */}
+      {!composerExpanded && !searchRequest ? (
         <Animated.View
           entering={FadeIn.duration(220)}
           exiting={FadeOut.duration(140)}
@@ -345,7 +348,7 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
       {/* The search sheet eases in (fade + a short rise of its content) and
           eases out on close, instead of appearing the instant the pill is
           focused; the dock fades away underneath it. */}
-      {composerExpanded ? (
+      {composerExpanded && !searchRequest ? (
         <Animated.View
           entering={FadeIn.duration(360)}
           exiting={FadeOut.duration(220)}

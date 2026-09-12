@@ -557,6 +557,7 @@ const ko = {
     error: '문제가 발생했습니다. 다시 시도해 주세요.',
     interpretedAs: '이렇게 이해했어요',
     searchAsTyped: '입력한 그대로 검색',
+    followUpPlaceholder: '추가 질문을 입력하세요',
   },
   signIn: {
     line1: '한국 여행을',

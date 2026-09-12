@@ -557,6 +557,7 @@ const ja = {
     error: '問題が発生しました。もう一度お試しください。',
     interpretedAs: '次のように解釈しました',
     searchAsTyped: '入力どおりに検索',
+    followUpPlaceholder: '追加の質問を入力',
   },
   signIn: {
     line1: '韓国を',

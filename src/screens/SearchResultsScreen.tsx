@@ -7,7 +7,6 @@ import {
   ImageSourcePropType,
   Keyboard,
   Linking,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,7 +17,7 @@ import {
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PaperAirplaneIcon } from 'react-native-heroicons/solid';
+import { SvgXml } from 'react-native-svg';
 import { shareContent } from '../utils/share';
 import LottieView from 'lottie-react-native';
 import { useTranslation } from 'react-i18next';
@@ -35,8 +34,17 @@ import { useLanguage } from '../context/LanguageContext';
 import { onboardingSource } from '../assets/onboardingAssets';
 import { trackEvent } from '../api/tracking';
 import { openTaxiBooking } from '../utils/taxiBooking';
-import { FormattedSummary } from '../components/FormattedAnswer';
+import { QuickAnswer } from '../components/QuickAnswer';
 import { KeyboardStickyView } from '../components/KeyboardStickyView';
+import { VoiceOverlay } from '../components/VoiceOverlay';
+import { useVoiceRecognition } from '../hooks/useVoiceRecognition';
+import {
+  SEARCH_BAR_MIC_FOCUSED_SVG,
+  SEARCH_BAR_MIC_SVG,
+  SEARCH_BAR_SEND_ACTIVE_SVG,
+  SEARCH_BAR_SEND_SVG,
+} from '../assets/searchBarAssets';
+import { QUICK_ANSWER_CHEVRON_SVG, QUICK_ANSWER_SHARE_SVG } from '../assets/quickAnswerAssets';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -127,6 +135,7 @@ interface Turn {
   searchQueries: string[];
   validationError: ValidationError | null;
   clarification: Clarification | null;
+  /** turn_act.resolved_query when it differs from the question — analytics-only, not rendered. */
   interpretedAs: string | null;
   summary: string;
   sources: SearchSource[];
@@ -157,7 +166,8 @@ function newTurn(query: string, skipResolution: boolean): Turn {
     error: false,
     errorMessage: null,
     responseId: null,
-    sourcesOpen: false,
+    // Figma's default state shows the sources unfolded.
+    sourcesOpen: true,
   };
 }
 
@@ -169,6 +179,13 @@ function newTurn(query: string, skipResolution: boolean): Turn {
 // one the History tab lists afterwards. The bottom navigation is hidden
 // while this screen is up (HomeScreen reports it full-screen); the search
 // bar takes its place.
+// Visuals follow Figma "FollowUp" (section 13266:92836): #f2f9ff page,
+// 52-tall top bar with a 20/SemiBold title, the question as a 14/Regular
+// bubble with a square bottom-right corner, and the Search Bar component in
+// its Default / Focused / Typing states. The answer sits straight on the
+// page (no card): QuickAnswer maps the markdown onto the template's type
+// scale, then numbered Related Questions and Sources lists, then the share
+// glyph (annotated: share, icon set 20×20).
 // The markdown-ish answer renderer is shared with the History transcript —
 // see src/components/FormattedAnswer.tsx.
 
@@ -187,6 +204,9 @@ export function SearchResultsScreen({ request, onBack }: Props) {
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
   const [draft, setDraft] = useState('');
+  // Search bar states (Figma): resting pill ↔ focused/typing card.
+  const [inputFocused, setInputFocused] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const [sharingKey, setSharingKey] = useState<number | null>(null);
   const [tickerIdx, setTickerIdx] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
@@ -221,6 +241,32 @@ export function SearchResultsScreen({ request, onBack }: Props) {
     },
     [scrollToEnd],
   );
+
+  // Voice input from the bar's mic (same recognizer + overlay as Home): the
+  // final transcript is asked in this chat.
+  const voice = useVoiceRecognition(language.voiceLocale, {
+    silenceMs: 2000,
+    onResult: (text) => {
+      setShowVoice(false);
+      ask(text);
+    },
+  });
+  useEffect(() => {
+    if (!voice.error) return;
+    if (!voice.error.toLowerCase().includes('permission')) return;
+    setShowVoice(false);
+    Alert.alert(t('voice.permissionDenied'));
+  }, [voice.error, t]);
+  const openVoice = async () => {
+    Keyboard.dismiss();
+    setShowVoice(true);
+    const started = await voice.start();
+    if (!started) setShowVoice(false);
+  };
+  const closeVoice = async () => {
+    await voice.stop();
+    setShowVoice(false);
+  };
 
   // A request handed in while this screen is up (History follow-up, About
   // page): same thread → one more turn; anything else starts a new chat.
@@ -500,6 +546,8 @@ export function SearchResultsScreen({ request, onBack }: Props) {
   };
 
   const canSend = !busy && !!draft.trim();
+  // The bar opens into the bordered card while the field has focus or text.
+  const barExpanded = inputFocused || draft.length > 0;
 
   return (
     <View style={styles.root}>
@@ -514,13 +562,13 @@ export function SearchResultsScreen({ request, onBack }: Props) {
         {/* Top bar */}
         <View style={styles.topBar}>
           <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={sx(24)} color="#1d192b" />
+            <Ionicons name="chevron-back" size={sx(24)} color="#505d6d" />
           </Pressable>
           <Text style={styles.topTitle} numberOfLines={1}>
             {t('search.title')}
           </Text>
           {/* Balances the back button so the title stays centred. */}
-          <View style={{ width: sx(36) }} />
+          <View style={{ width: sx(44) }} />
         </View>
 
         <ScrollView
@@ -548,39 +596,80 @@ export function SearchResultsScreen({ request, onBack }: Props) {
           ))}
         </ScrollView>
 
-        {/* Search bar — in place of the bottom navigation. Every question sent
-            from here continues this chat (same conversation id). */}
+        {/* Search bar — Figma "Search Bar" in place of the bottom navigation:
+            resting, a 48-tall white pill (#cae3fd hairline) holding the mic and
+            a muted send disc; focused or holding text, a #527dff-bordered card
+            whose field grows with the text and keeps the actions bottom-right.
+            The page fades into the bar through a short gradient. Every
+            question sent from here continues this chat (same conversation id). */}
         <View style={styles.composerWrap}>
           <LinearGradient
-            colors={['#5ca8ff', '#527dff']}
-            locations={[0, 0.55]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.composerPill}
-          >
-            {/* Balances the send button so typed text stays on the pill's
-                true centre. No placeholder — the bar reads as the empty pill. */}
-            <View style={styles.pillIconBtn} />
+            pointerEvents="none"
+            colors={['rgba(242,249,255,0)', '#f2f9ff']}
+            locations={[0, 0.7]}
+            style={styles.composerFade}
+          />
+          {/* One fixed tree in both states, and the field's OWN props never
+              change: on Android (Fabric) restyling a focused TextInput's text
+              attributes drops its focus the next frame, which is what turned
+              the first tap into a dead keyboard. Only the container, the
+              action row and the icons switch. The resting pill's 14px
+              placeholder is a separate overlay for the same reason. */}
+          <View style={barExpanded ? styles.barCard : styles.barPill}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              style={styles.pillInput}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              style={styles.barInput}
+              multiline
+              textAlignVertical="top"
               returnKeyType="send"
+              submitBehavior="submit"
               onSubmitEditing={() => {
                 if (canSend) ask(draft);
               }}
-              blurOnSubmit
             />
-            <Pressable onPress={() => ask(draft)} disabled={!canSend} style={styles.pillIconBtn} hitSlop={8}>
-              <PaperAirplaneIcon
-                size={sx(20)}
-                color={canSend ? '#fff' : 'rgba(255,255,255,0.4)'}
-                style={{ transform: [{ rotate: '-45deg' }] }}
-              />
-            </Pressable>
-          </LinearGradient>
+            <View style={barExpanded ? styles.barActionsExpanded : styles.barActionsPill}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Voice input"
+                onPress={openVoice}
+                style={styles.barMic}
+                hitSlop={8}
+              >
+                <SvgXml
+                  xml={barExpanded ? SEARCH_BAR_MIC_FOCUSED_SVG : SEARCH_BAR_MIC_SVG}
+                  width={sx(24)}
+                  height={sx(24)}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Send"
+                onPress={() => ask(draft)}
+                disabled={!canSend}
+                style={styles.barSend}
+                hitSlop={4}
+              >
+                <SvgXml xml={canSend ? SEARCH_BAR_SEND_ACTIVE_SVG : SEARCH_BAR_SEND_SVG} width={sx(48)} height={sx(48)} />
+              </Pressable>
+            </View>
+            {!barExpanded ? (
+              <Text pointerEvents="none" style={styles.barPlaceholder} numberOfLines={1}>
+                {t('search.followUpPlaceholder')}
+              </Text>
+            ) : null}
+          </View>
         </View>
       </KeyboardStickyView>
+
+      <VoiceOverlay
+        visible={showVoice}
+        onClose={closeVoice}
+        transcript={voice.partialText}
+        listening={voice.isListening}
+      />
     </View>
   );
 }
@@ -621,7 +710,7 @@ function TurnBlock({
   // belongs to the answer, not just the loading state), while the loader row
   // inside is stream-scoped — up from the moment the request is fired
   // (`streaming` starts true) until the backend reports the answer complete.
-  const showEarlyStrip = (streaming || !!category) && !validationError && !clarification;
+  const showEarlyStrip = streaming && !validationError && !clarification;
 
   return (
     <View style={spaced ? styles.turnSpaced : undefined}>
@@ -630,20 +719,10 @@ function TurnBlock({
         <Text style={styles.queryText}>{query}</Text>
       </View>
 
-      {/* The pipeline rewrote the question from the conversation so far
-          (turn_act.resolved_query). Shown so the rewrite is visible and
-          recoverable: "Search as typed" re-runs the exact text. */}
-      {turn.interpretedAs ? (
-        <View style={styles.interpretedRow}>
-          <Text style={styles.interpretedText} numberOfLines={2}>
-            <Text style={styles.interpretedLabel}>{t('search.interpretedAs')}: </Text>
-            {turn.interpretedAs}
-          </Text>
-          <Pressable hitSlop={8} onPress={() => onAsk(query, { skipResolution: true })}>
-            <Text style={styles.interpretedAction}>{t('search.searchAsTyped')}</Text>
-          </Pressable>
-        </View>
-      ) : null}
+      {/* The pipeline's rewrite of the question (turn_act.resolved_query,
+          kept on the turn as `interpretedAs`) is deliberately NOT shown — it
+          is analytics-only for now; the stream event is recorded with the
+          search_query tracking row. */}
 
       {/* In-flight indicator. The loader appears the instant the stream
           opens — it never waits for a category or a search term — and only
@@ -651,11 +730,6 @@ function TurnBlock({
           chip and the query ticker fill in around it as they arrive. */}
       {showEarlyStrip ? (
         <View style={styles.earlyStrip}>
-          {category ? (
-            <View style={styles.categoryChip}>
-              <Text style={styles.categoryChipText}>{category}</Text>
-            </View>
-          ) : null}
           {streaming ? (
             <View style={styles.searchingRow}>
               {/* Loading Lottie (SearchResult 12354:57687, 42×42). Vector
@@ -786,74 +860,77 @@ function TurnBlock({
         </View>
       ) : null}
 
-      {/* Answer card */}
+      {/* Answer — Figma Search_QuickAnswer: straight on the page, no card.
+          Title + numbered sections, then Related Questions and Sources as
+          numbered lists 12 apart, then the share glyph 24 below. */}
       {summary && !validationError ? (
-        <View style={styles.answerCard}>
-          <View style={styles.answerHeader}>
-            <Image source={BIRD} style={styles.answerAvatar} resizeMode="contain" />
-            <Text style={styles.answerBrand}>Konnect</Text>
-            {/* Confidence badge (grounded/partial dots) intentionally not
-                shown — product call; the state is still tracked. */}
-          </View>
-          <FormattedSummary text={summary} />
-          {/* Share the answer — inside the answer card, at its end, on the
-              same left margin as the text. Only once the search has been
-              persisted, since that id is what the short link is minted
-              from. */}
+        <View style={styles.answerBlocks}>
+          <QuickAnswer text={summary} />
+
+          {followups.length > 0 ? (
+            <View style={styles.listBlock}>
+              <Text style={styles.listTitle}>{t('search.related')}</Text>
+              <View style={styles.listBody}>
+                {followups.map((q, i) => (
+                  <Pressable key={q} style={styles.listRow} onPress={() => onAsk(q)} hitSlop={4}>
+                    <Text style={styles.listNum}>{String(i + 1).padStart(2, '0')}</Text>
+                    <Text style={styles.listText}>{q}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {sources.length > 0 ? (
+            <View style={styles.listBlock}>
+              <Pressable style={styles.sourcesHeader} onPress={onToggleSources} hitSlop={6}>
+                <Text style={styles.listTitle}>{t('search.sources')}</Text>
+                <View style={[styles.sourcesChevron, !turn.sourcesOpen && styles.sourcesChevronClosed]}>
+                  <SvgXml xml={QUICK_ANSWER_CHEVRON_SVG} width={sx(24.7)} height={sx(23.4)} />
+                </View>
+              </Pressable>
+              {turn.sourcesOpen ? (
+                <View style={styles.sourcesList}>
+                  {sources.map((src, i) => {
+                    // Hermes lacks a full URL implementation — split with a regex.
+                    const m = /^https?:\/\/([^/]+)(.*)$/.exec(src.url ?? '');
+                    const host = (m?.[1] ?? src.url ?? '').replace(/^www\./, '');
+                    const path = (m?.[2] ?? '').replace(/^\//, '').replace(/\/$/, '');
+                    return (
+                      <Pressable key={src.index ?? i} style={styles.sourceItem} onPress={() => openUrl(src.url)} hitSlop={4}>
+                        <View style={styles.sourceRow}>
+                          <Text style={styles.sourceNum}>{String(src.index ?? i + 1).padStart(2, '0')}</Text>
+                          <Text style={styles.sourceHost} numberOfLines={1}>
+                            {host}
+                          </Text>
+                        </View>
+                        {path ? (
+                          <Text style={styles.sourcePath} numberOfLines={1}>
+                            {path}
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* Share — only once the search has been persisted, since that id
+              is what the short link is minted from. */}
           {turn.responseId ? (
-            <Pressable onPress={onShare} disabled={sharing} hitSlop={10} style={styles.answerShare}>
-              <Ionicons
-                name={Platform.OS === 'ios' ? 'share-outline' : 'share-social-outline'}
-                size={sx(18)}
-                color={sharing ? '#c3cede' : '#93a5b9'}
-              />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share"
+              onPress={onShare}
+              disabled={sharing}
+              hitSlop={10}
+              style={[styles.shareBtn, sharing && styles.shareBtnBusy]}
+            >
+              <SvgXml xml={QUICK_ANSWER_SHARE_SVG} width={sx(30)} height={sx(30)} />
             </Pressable>
           ) : null}
-        </View>
-      ) : null}
-
-      {/* Follow-up questions — before the sources (product order). Tapping
-          one asks it in this chat. */}
-      {followups.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('search.related')}</Text>
-          {followups.map((q) => (
-            <Pressable key={q} style={styles.relatedRow} onPress={() => onAsk(q)}>
-              <Text style={styles.relatedText}>{q}</Text>
-              <Ionicons name="arrow-forward" size={sx(16)} color="#93a5b9" />
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-
-      {/* Sources — collapsed by default; the list only unfolds on tap. */}
-      {sources.length > 0 ? (
-        <View style={styles.section}>
-          <Pressable style={styles.sourcesToggle} onPress={onToggleSources} hitSlop={6}>
-            <Text style={styles.sectionTitle}>{t('search.sources')}</Text>
-            <Ionicons name={turn.sourcesOpen ? 'chevron-up' : 'chevron-down'} size={sx(18)} color="#93a5b9" />
-          </Pressable>
-          {turn.sourcesOpen &&
-            sources.map((s) => {
-              // Hermes lacks a full URL implementation — extract host via regex.
-              const host = s.url.match(/^https?:\/\/([^/]+)/)?.[1]?.replace(/^www\./, '') ?? s.url;
-              return (
-                <Pressable key={s.index} style={styles.sourceCard} onPress={() => openUrl(s.url)}>
-                  <View style={styles.sourceTag}>
-                    <Text style={styles.sourceTagText}>{s.index}</Text>
-                  </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.sourceTitle} numberOfLines={1}>
-                      {s.title || host}
-                    </Text>
-                    <Text style={styles.sourceSnippet} numberOfLines={1}>
-                      {s.url}
-                    </Text>
-                  </View>
-                  <Ionicons name="open-outline" size={sx(16)} color="#93a5b9" />
-                </Pressable>
-              );
-            })}
         </View>
       ) : null}
     </View>
@@ -862,7 +939,8 @@ function TurnBlock({
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, zIndex: 50, elevation: 50 },
-  flatBg: { backgroundColor: '#ecf4fe' },
+  // Figma semantic/surface/default.
+  flatBg: { backgroundColor: '#f2f9ff' },
   safe: { flex: 1 },
   flex: { flex: 1 },
 
@@ -871,73 +949,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  // Onboarding/Navigation/TopBar: 52 tall, pl 4 / pr 20 / py 4, 44 back
+  // button with a 24 chevron, Heading/20/SemiBold title.
   topBar: {
-    height: sy(48),
-    paddingHorizontal: sx(12),
+    height: sy(52),
+    paddingLeft: sx(4),
+    paddingRight: sx(20),
+    paddingVertical: sy(4),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   backBtn: {
-    width: sx(36),
-    height: sx(36),
+    width: sx(44),
+    height: sx(44),
     alignItems: 'center',
     justifyContent: 'center',
   },
   topTitle: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(18),
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(20),
+    lineHeight: sy(26),
     color: '#1d192b',
-    letterSpacing: -0.18,
+    letterSpacing: -0.2,
   },
 
-  content: { paddingHorizontal: sx(20), paddingBottom: sy(24) },
-  // Turns after the first sit a beat apart, like messages in a chat.
-  turnSpaced: { marginTop: sy(24) },
+  // Content Container: 340 wide on the 375 frame (17.5 sides), 20 below the
+  // top bar, 20 between turns.
+  content: { paddingHorizontal: sx(17.5), paddingTop: sy(20), paddingBottom: sy(24) },
+  turnSpaced: { marginTop: sy(20) },
 
+  // Question Section: accent bubble, radius 16 with a square bottom-right,
+  // px 16 / py 12, max 304 of 340, Body/14/Regular on #fefefe.
   queryBubble: {
     alignSelf: 'flex-end',
-    maxWidth: '86%',
+    maxWidth: '89%',
     backgroundColor: '#527dff',
-    borderRadius: sx(20),
-    borderBottomRightRadius: sx(6),
+    borderRadius: sx(16),
+    borderBottomRightRadius: 0,
     paddingVertical: sy(12),
     paddingHorizontal: sx(16),
-    marginTop: sy(8),
     marginBottom: sy(20),
   },
   queryText: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(15),
-    lineHeight: sy(22),
-    color: '#fff',
-    letterSpacing: -0.15,
-  },
-
-  // "Interpreted as: …" (Search v2 turn_act) under the question bubble.
-  interpretedRow: {
-    alignSelf: 'flex-end',
-    alignItems: 'flex-end',
-    maxWidth: '86%',
-    marginTop: -sy(12),
-    marginBottom: sy(16),
-    gap: sy(2),
-  },
-  interpretedText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: sx(12),
-    lineHeight: sy(17),
-    color: '#657586',
-    textAlign: 'right',
-  },
-  interpretedLabel: { fontFamily: 'NationalPark_600SemiBold', color: '#93a5b9' },
-  interpretedAction: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(12),
-    lineHeight: sy(17),
-    color: '#527dff',
+    fontFamily: 'NationalPark_400Regular',
+    fontSize: sx(14),
+    lineHeight: sy(20),
+    color: '#fefefe',
+    letterSpacing: -0.28,
   },
 
   // Clarification card (Search v2): question + option chips.
@@ -964,65 +1025,99 @@ const styles = StyleSheet.create({
     letterSpacing: -0.13,
   },
 
-  // Bottom search bar (Figma Search Bar: solid #527dff with a #5ca8ff inner
-  // top rim — approximated as a vertical gradient), where the tab bar was.
+  // Search bar (Figma "Search Bar" component) where the tab bar was. The
+  // wrapper is the page colour; a short gradient above it fades the chat in.
   composerWrap: {
     paddingHorizontal: sx(20),
-    paddingTop: sy(8),
+    paddingTop: sy(10),
     paddingBottom: sy(12),
+    backgroundColor: '#f2f9ff',
   },
-  composerPill: {
-    height: sy(60),
+  composerFade: { position: 'absolute', left: 0, right: 0, top: -sy(56), height: sy(56) },
+  // Default(F): 48-tall pill, #fefefe on a 1.2 #cae3fd hairline, text from
+  // 20 in; the mic (34) + send disc (48) sit over its right end.
+  barPill: {
+    height: sy(48),
+    justifyContent: 'center',
     borderRadius: 999,
+    borderWidth: 1.2,
+    borderColor: '#cae3fd',
+    backgroundColor: '#fefefe',
+    paddingLeft: sx(20),
+    paddingRight: sx(92),
+    overflow: 'hidden',
+  },
+  // Body/14/Medium, content-muted — drawn over the empty field while resting.
+  barPlaceholder: {
+    position: 'absolute',
+    left: sx(20),
+    right: sx(92),
+    top: 0,
+    bottom: 0,
+    textAlignVertical: 'center',
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(14),
+    lineHeight: sy(20),
+    letterSpacing: -0.14,
+    color: '#93a5b9',
+    includeFontPadding: false,
+  },
+  // Focused / Typing: 2.5 accent border, radius 20, page-coloured, field
+  // (Body/16/Medium) grows to 273 tall, actions bottom-right with a 12 gap.
+  barCard: {
+    borderRadius: sx(20),
+    borderWidth: 2.5,
+    borderColor: '#527dff',
+    backgroundColor: '#f2f9ff',
+    paddingTop: sy(16),
+    paddingBottom: sy(8),
+    paddingLeft: sx(20),
+    paddingRight: sx(12),
+    gap: sy(4),
+    shadowColor: '#0077ff',
+    shadowOpacity: 0.09,
+    shadowRadius: 7.6,
+    shadowOffset: { width: 2, height: 2 },
+    elevation: 3,
+  },
+  // Body/16/Medium; grows with the text up to 273 (Figma Input Section).
+  // Constant in both states — see the note at the field.
+  barInput: {
+    width: '100%',
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(16),
+    lineHeight: sy(24),
+    letterSpacing: -0.16,
+    color: '#1d192b',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: sy(24),
+    maxHeight: sy(273),
+    includeFontPadding: false,
+  },
+  barActionsPill: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: sx(6),
-    shadowColor: '#0077ff',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    gap: sx(8),
   },
-  pillIconBtn: {
-    width: sx(44),
-    height: sx(44),
-    borderRadius: 999,
+  barActionsExpanded: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    gap: sx(12),
+    width: '100%',
   },
-  pillInput: {
-    flex: 1,
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(16),
-    color: '#fff',
-    letterSpacing: -0.16,
-    textAlign: 'center',
-    // Android clips the NationalPark glyphs' descenders without these.
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    paddingVertical: sy(12),
-    paddingHorizontal: sx(12),
-  },
+  barMic: { width: sx(34), height: sx(34), alignItems: 'center', justifyContent: 'center' },
+  barSend: { width: sx(48), height: sx(48), alignItems: 'center', justifyContent: 'center' },
 
   // Early preview (web): category chip + "Searching for" ticker.
   earlyStrip: { marginBottom: sy(12), gap: sy(8) },
   searchingLottieBox: { width: sx(42), height: sx(42) },
   searchingLottie: { width: '100%', height: '100%' },
-  categoryChip: {
-    alignSelf: 'flex-start',
-    height: sy(22),
-    paddingHorizontal: sx(10),
-    borderRadius: 999,
-    backgroundColor: '#e8f1fb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryChipText: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(11),
-    color: '#0d47a1',
-    textTransform: 'capitalize',
-  },
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: sx(8), minHeight: sy(26) },
   searchingLabel: {
     fontFamily: 'NationalPark_600SemiBold',
@@ -1160,6 +1255,7 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
   },
 
+  // Clarification card (kept as a card — the template has no state for it).
   answerCard: {
     backgroundColor: '#fff',
     borderRadius: sx(20),
@@ -1169,11 +1265,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
-  },
-  answerShare: {
-    alignSelf: 'flex-start',
-    marginTop: sy(14),
-    paddingVertical: sy(2),
   },
   answerHeader: {
     flexDirection: 'row',
@@ -1190,64 +1281,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  section: { marginTop: sy(26) },
-  sectionTitle: {
+  // Answer template (Figma 13253:91524): blocks 12 apart, share 24 below.
+  answerBlocks: { gap: sy(12) },
+  listBlock: { gap: sy(8) },
+  listTitle: {
     fontFamily: 'NationalPark_700Bold',
     fontSize: sx(16),
-    color: '#221e31',
+    lineHeight: sy(24),
     letterSpacing: -0.16,
-    marginBottom: sy(12),
-  },
-  sourceCard: {
-    flexDirection: 'row',
-    gap: sx(12),
-    backgroundColor: '#fefefe',
-    borderRadius: sx(14),
-    padding: sx(14),
-    marginBottom: sy(10),
-    alignItems: 'center',
-  },
-  sourceTag: {
-    width: sx(24),
-    height: sx(24),
-    borderRadius: 999,
-    backgroundColor: '#eaefff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceTagText: {
-    fontFamily: 'NationalPark_700Bold',
-    fontSize: sx(12),
-    color: '#527dff',
-  },
-  sourceTitle: {
-    fontFamily: 'NationalPark_600SemiBold',
-    fontSize: sx(14),
     color: '#1d192b',
-    letterSpacing: -0.14,
   },
-  sourceSnippet: {
-    fontFamily: 'NationalPark_400Regular',
-    fontSize: sx(12),
-    color: '#93a5b9',
-    marginTop: sy(2),
-  },
-  relatedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fefefe',
-    borderRadius: sx(14),
-    paddingVertical: sy(14),
-    paddingHorizontal: sx(16),
-    marginBottom: sy(10),
-  },
-  relatedText: {
-    flex: 1,
+  // Summary Section: px 12 / pb 12, rows 8 apart, "01" + text 12 apart.
+  listBody: { paddingHorizontal: sx(12), paddingBottom: sy(12), gap: sy(8) },
+  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: sx(12) },
+  listNum: {
     fontFamily: 'NationalPark_600SemiBold',
     fontSize: sx(14),
-    color: '#332d41',
+    lineHeight: sy(20),
     letterSpacing: -0.14,
-    marginRight: sx(12),
+    color: '#1d192b',
   },
+  listText: {
+    flex: 1,
+    fontFamily: 'NationalPark_400Regular',
+    fontSize: sx(14),
+    lineHeight: sy(20),
+    letterSpacing: -0.14,
+    color: '#1d192b',
+  },
+  sourcesHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  sourcesChevron: { width: sx(24.7), height: sx(23.4) },
+  sourcesChevronClosed: { transform: [{ rotate: '180deg' }] },
+  sourcesList: { gap: sy(8) },
+  sourceItem: { paddingHorizontal: sx(12), gap: sy(4) },
+  sourceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: sx(12) },
+  sourceNum: {
+    fontFamily: 'NationalPark_600SemiBold',
+    fontSize: sx(13),
+    lineHeight: sy(16),
+    letterSpacing: -0.13,
+    color: '#332d41',
+  },
+  sourceHost: {
+    flex: 1,
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(13),
+    lineHeight: sy(16),
+    letterSpacing: -0.13,
+    color: '#332d41',
+  },
+  sourcePath: {
+    fontFamily: 'NationalPark_500Medium',
+    fontSize: sx(13),
+    lineHeight: sy(16),
+    letterSpacing: -0.13,
+    color: '#657586',
+  },
+  shareBtn: { width: sx(30), height: sx(30), marginTop: sy(12) },
+  shareBtnBusy: { opacity: 0.5 },
 });

@@ -557,6 +557,7 @@ const zh = {
     error: '出了点问题，请重试。',
     interpretedAs: '理解为',
     searchAsTyped: '按原文搜索',
+    followUpPlaceholder: '输入追加问题',
   },
   signIn: {
     line1: '让我们带你',

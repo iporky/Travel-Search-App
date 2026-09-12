@@ -557,6 +557,7 @@ const zhTW = {
     error: '出了點問題，請重試。',
     interpretedAs: '理解為',
     searchAsTyped: '按原文搜尋',
+    followUpPlaceholder: '輸入追加問題',
   },
   signIn: {
     line1: '讓我們帶你',

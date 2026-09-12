@@ -557,6 +557,7 @@ const fr = {
     error: 'Une erreur est survenue. Veuillez réessayer.',
     interpretedAs: 'Interprété comme',
     searchAsTyped: 'Rechercher tel quel',
+    followUpPlaceholder: 'Posez une question complémentaire',
   },
   signIn: {
     line1: 'On vous aide à',

@@ -557,6 +557,7 @@ const de = {
     error: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
     interpretedAs: 'Verstanden als',
     searchAsTyped: 'Wörtlich suchen',
+    followUpPlaceholder: 'Stelle eine Nachfrage',
   },
   signIn: {
     line1: 'Wir bringen dich',

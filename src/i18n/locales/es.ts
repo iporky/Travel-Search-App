@@ -557,6 +557,7 @@ const es = {
     error: 'Algo salió mal. Inténtalo de nuevo.',
     interpretedAs: 'Interpretado como',
     searchAsTyped: 'Buscar tal cual',
+    followUpPlaceholder: 'Haz una pregunta de seguimiento',
   },
   signIn: {
     line1: 'Vamos a que te muevas',

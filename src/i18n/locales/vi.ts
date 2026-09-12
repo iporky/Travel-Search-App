@@ -557,6 +557,7 @@ const vi = {
     error: 'Đã xảy ra lỗi. Vui lòng thử lại.',
     interpretedAs: 'Được hiểu là',
     searchAsTyped: 'Tìm đúng như đã nhập',
+    followUpPlaceholder: 'Đặt câu hỏi tiếp theo',
   },
   signIn: {
     line1: 'Hãy để chúng tôi đưa bạn',
