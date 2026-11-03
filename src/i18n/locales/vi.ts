@@ -560,6 +560,9 @@ const vi = {
     followUpPlaceholder: 'Đặt câu hỏi tiếp theo',
   },
   signIn: {
+    continueWithGoogle: 'Tiếp tục với Google',
+    continueWithFacebook: 'Tiếp tục với Facebook',
+    continueWithApple: 'Tiếp tục với Apple',
     line1: 'Hãy để chúng tôi đưa bạn',
     line2Prefix: 'khám phá',
     line2Bold: 'Hàn Quốc',

@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Konnect",
-    "slug": "konnect-app",
+    "name": "Travel Search App",
+    "slug": "travel-search-app",
     "scheme": "konnect-app",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -24,6 +24,7 @@
     },
     "android": {
       "package": "com.konnect.kr",
+      "allowBackup": false,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",

@@ -4,7 +4,6 @@ import {
   GestureResponderEvent,
   Image,
   ImageSourcePropType,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -25,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { SCREEN2_BIRD_SVG } from '../../assets/screen2BirdSvg';
+import { PressableScale } from '../../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -169,7 +169,7 @@ export function SplashWelcome2({ onPress, active }: Props) {
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   return (
-    <Pressable style={styles.root} onPress={onPress}>
+    <PressableScale style={styles.root} onPress={onPress}>
       {/* Soft radial glow behind the hero bird (small positioned SVG). */}
       <Svg
         style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(BIRD_CY) - sy(215), width: sx(470), height: sy(430) }}
@@ -218,7 +218,7 @@ export function SplashWelcome2({ onPress, active }: Props) {
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
       </Animated.View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

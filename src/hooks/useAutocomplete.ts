@@ -12,8 +12,8 @@ export interface AutocompleteState {
 
 /** Keystrokes settle for this long before a request goes out. */
 const DEBOUNCE_MS = 250;
-/** Below this the API answers with an empty list anyway; show Trending instead. */
-const MIN_CHARS = 2;
+/** Contract minimum (page 66682883, rev. 2026-09-15): requests start at 3 characters. */
+const MIN_CHARS = 3;
 
 const IDLE: AutocompleteState = { status: 'idle', suggestions: [], forQuery: '' };
 

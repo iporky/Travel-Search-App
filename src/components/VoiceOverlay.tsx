@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, ImageSourcePropType, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageSourcePropType, Modal, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   runOnJS,
@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { onboardingSource } from '../assets/onboardingAssets';
 import { LottieEdgeFeather, LottieHalo } from './LottieEdgeFeather';
+import { PressableScale } from './PressableScale';
 
 const VOICE_BIRD = onboardingSource(
   require('../../assets/voice/bird.png') as ImageSourcePropType,
@@ -167,9 +168,9 @@ export function VoiceOverlay({ visible, onClose, transcript, listening = true }:
         </View>
 
         <View style={styles.row}>
-          <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={12}>
+          <PressableScale style={styles.closeBtn} onPress={onClose} hitSlop={12}>
             <SvgXml xml={CLOSE_X_SVG} width={24} height={24} />
-          </Pressable>
+          </PressableScale>
 
           <View style={styles.micWrap}>
             <Animated.View style={[styles.ringOuter, outerStyle]} />

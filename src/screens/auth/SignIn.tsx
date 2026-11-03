@@ -7,13 +7,11 @@ import {
   GestureResponderEvent,
   Image,
   ImageSourcePropType,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +24,10 @@ import LottieView from 'lottie-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { SIGNIN_BIRD_SVG, SIGNIN_TOP_CLOUD_SVG, SIGNIN_BOTTOM_CLOUD_SVG } from '../../assets/signInAssets';
+import { LOGIN_FACEBOOK_ICON_SVG, LOGIN_GOOGLE_ICON_SVG } from '../../assets/loginButtonAssets';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
+import { AnimatedModal } from '../../components/AnimatedModal';
+import { PressableScale } from '../../components/PressableScale';
 
 // Designer's looping login Kiki — a 720x533 transparent-WebP frame sequence
 // whose canvas aspect matches the design's 301x223 hero slot exactly, so it
@@ -48,10 +49,6 @@ const sx = (n: number) => (n * W) / DESIGN_W;
 const sy = (n: number) => (n * H) / DESIGN_H;
 
 const ICON_APPLE    = onboardingSource(require('../../../assets/auth/apple.png') as ImageSourcePropType, 'apple');
-// Crisp vector Google "G" (the raster PNG looked pixelated).
-const GOOGLE_SVG = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><mask id="m0" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20"><path d="M20 0H0V20H20V0Z" fill="white"/></mask><g mask="url(#m0)"><path d="M19.6 10.2273C19.6 9.51822 19.5364 8.83642 19.4182 8.18182H10V12.05H15.3818C15.15 13.3 14.4455 14.3591 13.3864 15.0682V17.5773H16.6182C18.5091 15.8364 19.6 13.2727 19.6 10.2273Z" fill="#4285F4"/><path d="M9.99988 20C12.6999 20 14.9635 19.1045 16.618 17.5773L13.3862 15.0682C12.4908 15.6682 11.3453 16.0227 9.99988 16.0227C7.39528 16.0227 5.19078 14.2636 4.40438 11.9H1.06348V14.4909C2.70898 17.7591 6.09078 20 9.99988 20Z" fill="#34A853"/><path d="M4.4045 11.9C4.2045 11.3 4.0909 10.6591 4.0909 9.99999C4.0909 9.34089 4.2045 8.69999 4.4045 8.09999V5.50909H1.0636C0.3864 6.85909 0 8.38639 0 9.99999C0 11.6136 0.3864 13.1409 1.0636 14.4909L4.4045 11.9Z" fill="#FBBC04"/><path d="M9.99988 3.9773C11.468 3.9773 12.7862 4.4818 13.8226 5.4727L16.6908 2.6045C14.959 0.9909 12.6953 0 9.99988 0C6.09078 0 2.70898 2.2409 1.06348 5.5091L4.40438 8.1C5.19078 5.7364 7.39528 3.9773 9.99988 3.9773Z" fill="#E94235"/></g></svg>`;
-const ICON_FACEBOOK = onboardingSource(require('../../../assets/auth/facebook.png') as ImageSourcePropType, 'facebook');
-
 interface Props {
   activeIndex?: number;
   /** Pager tap handler: a tap on the hero/title area goes back a slide. */
@@ -212,27 +209,27 @@ export function SignIn({ onPress, active }: Props) {
         </Animated.View>
       </Pressable>
 
-      {/* Social sign-in + terms, anchored to the bottom of the screen. */}
-      <Animated.View style={[styles.bottomGroup, { bottom: insets.bottom + sy(20) }, fadeStyle]}>
-        <View style={styles.socialRow}>
+      {/* Social sign-in + terms, anchored to the bottom of the screen.
+          Figma SignUp_SignIn_Android (13192:85512): full-width outlined
+          "Continue with …" buttons 8 apart, the terms footer 12 below. */}
+      {/* Design: container bottom 58 = the 34 home-indicator zone + 24. */}
+      <Animated.View style={[styles.bottomGroup, { bottom: Math.max(insets.bottom, sy(34)) + sy(24) }, fadeStyle]}>
+        <View style={styles.loginButtons}>
           {Platform.OS === 'ios' ? (
-            <TouchableOpacity onPress={handleApplePress} activeOpacity={0.85}>
-              <Image source={ICON_APPLE} style={styles.appleIcon} resizeMode="cover" />
-            </TouchableOpacity>
+            <PressableScale onPress={handleApplePress} style={styles.loginBtn}>
+              <Image source={ICON_APPLE} style={styles.loginIconApple} resizeMode="cover" />
+              <Text style={styles.loginBtnText}>{t('signIn.continueWithApple')}</Text>
+            </PressableScale>
           ) : (
-            <TouchableOpacity
-              onPress={handleGooglePress}
-              activeOpacity={0.85}
-              disabled={authLoading || !active}
-            >
-              <View style={styles.googleBtn}>
-                <SvgXml xml={GOOGLE_SVG} width={sx(20)} height={sx(20)} />
-              </View>
-            </TouchableOpacity>
+            <PressableScale onPress={handleGooglePress} disabled={authLoading || !active} style={styles.loginBtn}>
+              <SvgXml xml={LOGIN_GOOGLE_ICON_SVG} width={sx(22)} height={sx(22)} />
+              <Text style={styles.loginBtnText}>{t('signIn.continueWithGoogle')}</Text>
+            </PressableScale>
           )}
-          <TouchableOpacity onPress={handleFacebookPress} activeOpacity={0.85}>
-            <Image source={ICON_FACEBOOK} style={styles.facebookIcon} resizeMode="cover" />
-          </TouchableOpacity>
+          <PressableScale onPress={handleFacebookPress} style={styles.loginBtn}>
+            <SvgXml xml={LOGIN_FACEBOOK_ICON_SVG} width={sx(24)} height={sx(24)} />
+            <Text style={styles.loginBtnText}>{t('signIn.continueWithFacebook')}</Text>
+          </PressableScale>
         </View>
 
         {/* Terms — links are full Pressables with hitSlop so the whole word is
@@ -240,13 +237,13 @@ export function SignIn({ onPress, active }: Props) {
         <View style={styles.termsWrap}>
           <Text style={styles.terms}>By creating an account, you agree to our</Text>
           <View style={styles.termsLinksRow}>
-            <Pressable onPress={() => setPolicy('terms')} hitSlop={12}>
+            <PressableScale onPress={() => setPolicy('terms')} hitSlop={12}>
               <Text style={[styles.terms, styles.termsLink]}>Terms of Use</Text>
-            </Pressable>
+            </PressableScale>
             <Text style={styles.terms}> and </Text>
-            <Pressable onPress={() => setPolicy('privacy')} hitSlop={12}>
+            <PressableScale onPress={() => setPolicy('privacy')} hitSlop={12}>
               <Text style={[styles.terms, styles.termsLink]}>Privacy Policy</Text>
-            </Pressable>
+            </PressableScale>
             <Text style={styles.terms}>.</Text>
           </View>
         </View>
@@ -255,10 +252,11 @@ export function SignIn({ onPress, active }: Props) {
       {/* Full-screen loader while the provider sign-in + Firebase exchange runs.
           Rendered in a transparent Modal (its own window, translucent bars) so
           it never affects the layout or size of the screen behind it. */}
-      <Modal
+      <AnimatedModal
         visible={authLoading}
-        transparent
-        animationType="fade"
+        variant="fade"
+        dismissOnScrim={false}
+        scrimColor="transparent"
         statusBarTranslucent
         onRequestClose={() => {}}
       >
@@ -268,25 +266,24 @@ export function SignIn({ onPress, active }: Props) {
             <Text style={styles.authLoadingText}>{t('signIn.signingIn')}</Text>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
-      {/* Policy overlay (Terms of Use / Privacy Policy) */}
-      <Modal
+      {/* Policy overlay (Terms of Use / Privacy Policy) — the scrim is the
+          AnimatedModal's own layer behind the card, so the ScrollView has no
+          Pressable ancestor stealing the drag. */}
+      <AnimatedModal
         visible={policy !== null}
-        transparent
-        animationType="fade"
+        variant="dialog"
+        scrimColor="rgba(17, 26, 96, 0.35)"
         onRequestClose={() => setPolicy(null)}
       >
-        {/* Backdrop is its own layer BEHIND the card — the card is a plain View,
-            so the ScrollView has no Pressable ancestor stealing the drag. */}
-        <View style={styles.policyRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPolicy(null)} />
+        <View style={styles.policyRoot} pointerEvents="box-none">
           <View style={styles.policyCard}>
             <View style={styles.policyHeader}>
               <Text style={styles.policyTitle}>{policy ? POLICY_TEXT[policy].title : ''}</Text>
-              <Pressable onPress={() => setPolicy(null)} hitSlop={12} style={styles.policyCloseBtn}>
+              <PressableScale onPress={() => setPolicy(null)} hitSlop={12} style={styles.policyCloseBtn}>
                 <Ionicons name="close" size={sx(22)} color="#657586" />
-              </Pressable>
+              </PressableScale>
             </View>
             <ScrollView
               style={styles.policyScroll}
@@ -298,7 +295,7 @@ export function SignIn({ onPress, active }: Props) {
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </AnimatedModal>
     </View>
   );
 }
@@ -308,18 +305,24 @@ const styles = StyleSheet.create({
   // Cloud positions per SignUp_SignIn_Android (12320:52240).
   cloudBottom: { position: 'absolute', left: sx(-3.5), top: sy(281), opacity: 0.2 },
   cloudTop: { position: 'absolute', left: sx(231), top: sy(85), opacity: 0.5 },
+  // Figma SignUp_SignIn_Android (13192:85512): the "Text Content" column
+  // runs 61→537 with the header at its top and the bird group at its bottom:
+  // bird slot 278×207 at y 168, title 36 below it (top 411). The Lottie's
+  // canvas has motion padding, so its bird draws ~20% smaller than the
+  // design's still; the box is scaled 1.25× about the same centre (142→401)
+  // and the gap shrinks so the title still starts at 411.
   topContent: {
     position: 'absolute',
-    top: sy(200),
+    top: sy(142),
     left: 0,
     right: 0,
     alignItems: 'center',
-    gap: sy(36),
+    gap: sy(10),
   },
   // Flat screen background = the login Lottie's own frame color.
 
-  // Login hero Lottie (301×223 design px; bg matches the screen).
-  heroLottieBox: { width: sx(301), height: sx(223) },
+  // Login hero Lottie: the design's 278×207 bird slot ×1.25 (same 1064:792 aspect).
+  heroLottieBox: { width: sx(348), height: sx(259) },
   heroLottie: { width: '100%', height: '100%' },
   textColumn: {
     width: sx(300),
@@ -341,7 +344,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    gap: sx(4),
+    gap: sx(2),
   },
   betaTag: {
     height: sy(16),
@@ -359,12 +362,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.12,
     lineHeight: sy(16),
   },
+  // Container: px 20, buttons column then footer 12 apart.
   bottomGroup: {
     position: 'absolute',
     left: 0,
     right: 0,
     alignItems: 'center',
-    gap: sy(20),
+    paddingHorizontal: sx(20),
+    gap: sy(12),
   },
   titleMed: {
     fontFamily: 'NationalPark_500Medium',
@@ -389,33 +394,36 @@ const styles = StyleSheet.create({
     lineHeight: sy(24),
     letterSpacing: -0.16,
   },
-  socialRow: {
+  loginButtons: { width: '100%', gap: sy(8) },
+  // "Google Login" / "Facebook Login": h 44, 1px #c5d7ec outline, radius 8,
+  // px 12, icon + label 10 apart, centred. No fill — the gradient shows through.
+  loginBtn: {
+    width: '100%',
+    height: sy(44),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: sx(24),
-  },
-  appleIcon: {
-    width: sx(44),
-    height: sx(44),
-    borderRadius: sx(12),
-  },
-  googleBtn: {
-    width: sx(44),
-    height: sx(44),
-    borderRadius: sx(99),
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c8c8c8',
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: sx(10),
+    paddingHorizontal: sx(12),
+    borderRadius: sx(8),
+    borderWidth: 1,
+    borderColor: '#c5d7ec',
   },
-  facebookIcon: {
-    width: sx(40),
-    height: sx(40),
-    borderRadius: sx(99),
+  // Label is Google Sans Flex Medium 14/20 in the design; the app doesn't
+  // bundle it, so this is the platform's own medium sans (Roboto on Android).
+  loginBtnText: {
+    fontFamily: Platform.OS === 'android' ? 'sans-serif-medium' : undefined,
+    fontWeight: '500',
+    fontSize: sx(14),
+    lineHeight: sy(20),
+    color: '#1f1f1f',
   },
+  loginIconApple: { width: sx(22), height: sx(22), borderRadius: sx(6) },
+  // Footer: px 24 / py 12 around the two centred terms lines.
   termsWrap: {
     alignItems: 'center',
+    paddingHorizontal: sx(24),
+    paddingVertical: sy(12),
   },
   termsLinksRow: {
     flexDirection: 'row',
@@ -460,7 +468,7 @@ const styles = StyleSheet.create({
   },
   policyRoot: {
     flex: 1,
-    backgroundColor: 'rgba(17, 26, 96, 0.35)',
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: sx(20),

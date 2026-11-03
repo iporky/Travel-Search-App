@@ -4,7 +4,6 @@ import {
   BackHandler,
   Linking,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   SectionList,
@@ -305,6 +304,8 @@ export function EventsScreen({ onFullScreen }: Props) {
     if (!ev.sourceUrl) return;
     // Contract row 5: open_event_link, the URL rides in metadata.event_link.
     track.openEventLink(ev.id, ev.sourceUrl);
+    // Only web links leave the app.
+    if (!/^https?:\/\//i.test(ev.sourceUrl)) return;
     Linking.openURL(ev.sourceUrl).catch(() => {});
   };
 
@@ -384,33 +385,33 @@ export function EventsScreen({ onFullScreen }: Props) {
                   contentContainerStyle={styles.activeChips}
                 >
                   {filters.day && (
-                    <Pressable style={styles.activeChip} onPress={() => setFilters((f) => ({ ...f, day: null }))}>
+                    <PressableScale style={styles.activeChip} onPress={() => setFilters((f) => ({ ...f, day: null }))}>
                       <Ionicons name="calendar-outline" size={14} color={colors.blue[500]} />
                       <Text style={styles.activeChipText}>{formatDay(filters.day, language.voiceLocale)}</Text>
                       <Ionicons name="close" size={14} color={colors.blue[500]} />
-                    </Pressable>
+                    </PressableScale>
                   )}
                   {filters.categories.map((c) => (
-                    <Pressable
+                    <PressableScale
                       key={c}
                       style={styles.activeChip}
                       onPress={() => setFilters((f) => ({ ...f, categories: f.categories.filter((x) => x !== c) }))}
                     >
                       <Text style={styles.activeChipText}>{c}</Text>
                       <Ionicons name="close" size={14} color={colors.blue[500]} />
-                    </Pressable>
+                    </PressableScale>
                   ))}
                   {filters.sort && (
-                    <Pressable style={styles.activeChip} onPress={() => setFilters((f) => ({ ...f, sort: null }))}>
+                    <PressableScale style={styles.activeChip} onPress={() => setFilters((f) => ({ ...f, sort: null }))}>
                       <Ionicons name="swap-vertical" size={14} color={colors.blue[500]} />
                       <Text style={styles.activeChipText}>{t(`events.sort.${filters.sort}`)}</Text>
                       <Ionicons name="close" size={14} color={colors.blue[500]} />
-                    </Pressable>
+                    </PressableScale>
                   )}
                 </ScrollView>
-                <Pressable hitSlop={8} onPress={() => setFilters(EMPTY_EVENT_FILTERS)}>
+                <PressableScale hitSlop={8} onPress={() => setFilters(EMPTY_EVENT_FILTERS)}>
                   <Text style={styles.clearText}>{t('events.clear')}</Text>
-                </Pressable>
+                </PressableScale>
               </View>
             ) : null
           }
@@ -424,10 +425,16 @@ export function EventsScreen({ onFullScreen }: Props) {
                 <Text style={styles.sectionTitle}>{section.title}</Text>
               </View>
               {section.key === sections[0]?.key && (
-                <Pressable style={styles.filterBtn} hitSlop={10} onPress={() => setFilterOpen(true)}>
+                <PressableScale
+                  style={styles.filterBtn}
+                  hitSlop={10}
+                  onPress={() => setFilterOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Filters"
+                >
                   <Ionicons name="options-outline" size={24} color={colors.icon.primary} />
                   {filterActive && <View style={styles.filterDot} />}
-                </Pressable>
+                </PressableScale>
               )}
             </View>
           )}
@@ -459,12 +466,12 @@ export function EventsScreen({ onFullScreen }: Props) {
               <Text style={styles.muted}>{t(filterActive ? 'events.noMatches' : 'events.empty')}</Text>
               {filterActive && (
                 <View style={styles.emptyActions}>
-                  <Pressable style={styles.retryBtn} onPress={() => setFilterOpen(true)}>
+                  <PressableScale style={styles.retryBtn} onPress={() => setFilterOpen(true)}>
                     <Text style={styles.retryText}>{t('events.filters')}</Text>
-                  </Pressable>
-                  <Pressable style={styles.ghostBtn} onPress={() => setFilters(EMPTY_EVENT_FILTERS)}>
+                  </PressableScale>
+                  <PressableScale style={styles.ghostBtn} onPress={() => setFilters(EMPTY_EVENT_FILTERS)}>
                     <Text style={styles.ghostText}>{t('events.clear')}</Text>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               )}
             </View>
@@ -546,13 +553,13 @@ function EventDetail({
   return (
     <View style={styles.flex}>
       <View style={styles.detailTop}>
-        <Pressable style={styles.backBtn} hitSlop={8} onPress={onBack}>
+        <PressableScale style={styles.backBtn} hitSlop={8} onPress={onBack}>
           <Ionicons name="chevron-back" size={24} color={colors.gray[1300]} />
-        </Pressable>
+        </PressableScale>
         <View style={styles.detailTopActions}>
           {/* Mints a short link, then opens the OS share sheet. The glyph
               follows each platform's own share affordance. */}
-          <Pressable hitSlop={8} onPress={onShare} disabled={sharing}>
+          <PressableScale hitSlop={8} onPress={onShare} disabled={sharing}>
             {sharing ? (
               <ActivityIndicator size="small" color={colors.icon.primary} />
             ) : (
@@ -562,7 +569,7 @@ function EventDetail({
                 color={colors.icon.primary}
               />
             )}
-          </Pressable>
+          </PressableScale>
           <BookmarkButton
             saved={!!event.save_status}
             size={24}
@@ -592,14 +599,14 @@ function EventDetail({
           {event.duration ? <MetaRow icon="hourglass-outline" text={event.duration} /> : null}
         </View>
         <View style={styles.statsRow}>
-          <Pressable style={styles.stat} hitSlop={6} onPress={onToggleLike}>
+          <PressableScale style={styles.stat} hitSlop={6} onPress={onToggleLike}>
             <Ionicons
               name={event.like_status ? 'heart' : 'heart-outline'}
               size={22}
               color={event.like_status ? colors.red[100] : colors.icon.primary}
             />
             <Text style={styles.statText}>{event.like_count}</Text>
-          </Pressable>
+          </PressableScale>
           <View style={styles.stat}>
             <Ionicons name="bookmark-outline" size={22} color={colors.icon.primary} />
             <Text style={styles.statText}>{event.save_count}</Text>
@@ -611,10 +618,10 @@ function EventDetail({
           {loading && <ActivityIndicator size="small" color={colors.blue[500]} />}
         </View>
         {event.sourceUrl ? (
-          <Pressable style={styles.sourceBtn} onPress={onOpenSource}>
+          <PressableScale style={styles.sourceBtn} onPress={onOpenSource}>
             <Ionicons name="open-outline" size={16} color={colors.blue[500]} />
             <Text style={styles.sourceText}>{event.sourceLabel || t('events.viewSource')}</Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
       </ScrollView>
 

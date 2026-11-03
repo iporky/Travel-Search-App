@@ -1,15 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  Dimensions,
-  GestureResponderEvent,
-  Image,
-  ImageSourcePropType,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Dimensions, GestureResponderEvent, Image, ImageSourcePropType, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -32,6 +22,7 @@ import { SignIn } from './auth/SignIn';
 import { LanguageScreen } from './LanguageScreen';
 import { onboardingSource } from '../assets/onboardingAssets';
 import { WelcomeParallax } from '../components/WelcomeParallax';
+import { PressableScale } from '../components/PressableScale';
 
 // Memoized slides: they only re-render when their own `active` flag flips,
 // keeping the swipe gesture running purely on the native scroll thread.
@@ -320,10 +311,10 @@ export function OnboardingScreen({ onDone, initialSignInIndex = false }: Props) 
           baseline and stay put while the pages slide underneath. */}
       <View style={styles.topBar} pointerEvents="box-none">
         <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-        <Pressable onPress={() => setShowLanguage(true)} style={styles.languageBtn} hitSlop={8}>
+        <PressableScale onPress={() => setShowLanguage(true)} style={styles.languageBtn} hitSlop={8}>
           <Ionicons name="globe-outline" size={sx(18)} color={colors.gray[900]} />
           <Text style={styles.languageCode}>{langPrefix}</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* Stationary pagination dots. The Skip / Get started button was removed
@@ -441,7 +432,9 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: '#527dff',
   },
+  // Inactive dots are ink at 24%: the old accent-secondary #c9e3ff was the
+  // same tone as the near ground under them (#cddff9) and disappeared.
   dotInactive: {
-    backgroundColor: '#c9e3ff',
+    backgroundColor: 'rgba(29, 25, 43, 0.24)',
   },
 });

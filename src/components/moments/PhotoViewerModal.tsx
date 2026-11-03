@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { AnimatedModal } from '../AnimatedModal';
 
 type Props = {
   visible: boolean;
@@ -26,9 +27,7 @@ export function PhotoViewerModal({ visible, photos, initialIndex, onClose }: Pro
   const current = photos[Math.min(index, photos.length - 1)];
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View pointerEvents="box-none" style={styles.center}>
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="fade" scrimColor="rgba(0,0,0,0.75)">
         <View style={styles.container}>
           <View style={styles.photoWrap}>
             <Image
@@ -59,17 +58,11 @@ export function PhotoViewerModal({ visible, photos, initialIndex, onClose }: Pro
             ))}
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-  },
-  center: { flex: 1, justifyContent: 'center' },
   container: { paddingHorizontal: spacing[5], gap: spacing[3] },
   photoWrap: { borderRadius: radius.md, overflow: 'hidden' },
   photo: {

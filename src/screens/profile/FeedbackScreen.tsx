@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../../components/buzz/ConfirmDialog';
 import { FormField, PrimaryButton, SectionTitle, TopBar } from '../../components/profile/ProfileUI';
 import { FeedbackType, submitFeedback } from '../../api/feedback';
 import { track } from '../../api/tracking';
+import { PressableScale } from '../../components/PressableScale';
 
 // Figma "Profile_Setting_Feedback" (12276:94079), annotation "Feedback Form":
 //   • Feedback type: Suggest / Like / Dislike (single select radios)
@@ -67,14 +68,14 @@ export function FeedbackScreen({ onBack }: Props) {
             {TYPES.map((v) => {
               const active = type === v;
               return (
-                <Pressable key={v} style={styles.option} onPress={() => setType(v)} hitSlop={4}>
+                <PressableScale key={v} style={styles.option} onPress={() => setType(v)} hitSlop={4}>
                   <MaterialIcons
                     name={active ? 'radio-button-checked' : 'radio-button-unchecked'}
                     size={18}
                     color={active ? colors.blue[500] : colors.gray[700]}
                   />
                   <Text style={styles.optionLabel}>{t(`feedback.types.${v}`)}</Text>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -96,15 +97,15 @@ export function FeedbackScreen({ onBack }: Props) {
               multiline
               footer={
                 <View style={styles.attachRow}>
-                  <Pressable style={styles.attachBtn} hitSlop={6} onPress={pickImage}>
+                  <PressableScale style={styles.attachBtn} hitSlop={6} onPress={pickImage}>
                     <MaterialIcons name="image" size={24} color={colors.gray[900]} />
-                  </Pressable>
+                  </PressableScale>
                   {fileUri && (
                     <View style={styles.thumbWrap}>
                       <Image source={{ uri: fileUri }} style={styles.thumb} />
-                      <Pressable style={styles.thumbRemove} hitSlop={6} onPress={() => setFileUri(null)}>
+                      <PressableScale style={styles.thumbRemove} hitSlop={6} onPress={() => setFileUri(null)}>
                         <MaterialIcons name="close" size={14} color={colors.gray[100]} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                   )}
                 </View>

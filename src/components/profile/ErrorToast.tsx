@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { AnimatedModal } from '../AnimatedModal';
 import { colors, spacing } from '../../theme/tokens';
 
 // Figma "Notification" (12276:94894, Profile_Alert_MaxInterests): red
 // (#e62d3c) pill, radius 16, pl 12 / pr 24 / py 12, 24px Google "error" icon
 // + 16/SemiBold white text, centred on a 60% scrim. Auto-dismisses after 3 s
-// (interaction annotation); tapping the scrim dismisses early.
+// (interaction annotation); tapping the scrim dismisses early. The reveal and
+// the dismiss are AnimatedModal's dialog motion (scale + fade, scrim fades).
 
 type Props = {
   visible: boolean;
@@ -17,40 +18,28 @@ type Props = {
 };
 
 export function ErrorToast({ visible, message, onHide, durationMs = 3000 }: Props) {
-  // 0 → 1 reveal: fades in with a touch of scale, on the UI thread.
-  const reveal = useSharedValue(0);
-
   useEffect(() => {
     if (!visible) return;
-    reveal.value = 0;
-    reveal.value = withTiming(1, { duration: 160 });
     const id = setTimeout(onHide, durationMs);
     return () => clearTimeout(id);
-  }, [visible, durationMs, onHide, reveal]);
-
-  const toastStyle = useAnimatedStyle(() => ({
-    opacity: reveal.value,
-    transform: [{ scale: interpolate(reveal.value, [0, 1], [0.96, 1]) }],
-  }));
+  }, [visible, durationMs, onHide]);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onHide}>
-      <Pressable style={styles.scrim} onPress={onHide} />
+    <AnimatedModal visible={visible} variant="dialog" scrimColor="rgba(0,0,0,0.6)" onRequestClose={onHide}>
       <View style={styles.center} pointerEvents="box-none">
-        <Animated.View style={[styles.toast, toastStyle]}>
+        <View style={styles.toast}>
           <MaterialIcons name="error-outline" size={24} color={colors.surface.card} />
           <Text style={styles.text} numberOfLines={2}>
             {message}
           </Text>
-        </Animated.View>
+        </View>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8] },
+  center: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[8] },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',

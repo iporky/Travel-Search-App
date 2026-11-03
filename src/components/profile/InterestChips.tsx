@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../theme/tokens';
+import { PressableScale } from '../PressableScale';
 
 // Figma Interests section (12322:53992 / "Popular categories list", Aug
 // revision): chips live inside a white card; unselected: 1px SOLID #abbed2,
@@ -81,7 +82,7 @@ export function InterestChip({
 }) {
   const filled = selected && !dashed;
   return (
-    <Pressable
+    <PressableScale
       style={({ pressed }) => [
         styles.chip,
         filled ? styles.chipSelected : styles.chipOutline,
@@ -92,7 +93,7 @@ export function InterestChip({
       disabled={!onPress}
     >
       <Text style={[styles.chipText, filled && styles.chipTextSelected]}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

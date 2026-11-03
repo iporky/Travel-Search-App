@@ -5,8 +5,6 @@ import {
   Alert,
   Dimensions,
   ImageSourcePropType,
-  Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -43,6 +41,7 @@ import { FORCE_ONBOARDING } from '../../config';
 import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
 import { CROSSFADE_DURATION, ScreenTransition } from '../../components/ScreenTransition';
 import { UsernameTakenError } from '../../api/errors';
+import { AnimatedModal } from '../../components/AnimatedModal';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -462,48 +461,52 @@ function CounterOverlay({
   // With edge-to-edge the modal window draws under the system navigation bar —
   // pad the sheet so the Confirm button clears it.
   const insets = useSafeAreaInsets();
+  // The sheet slides away first; whatever was chosen runs once it is gone.
+  const [open, setOpen] = useState(true);
+  const afterClose = useRef<() => void>(onClose);
+  const dismiss = (then: () => void) => {
+    afterClose.current = then;
+    setOpen(false);
+  };
 
   return (
-    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+    <AnimatedModal
+      visible={open}
+      variant="sheet"
+      statusBarTranslucent
+      scrimColor="rgba(17, 26, 96, 0.35)"
+      onRequestClose={() => dismiss(onClose)}
+      onDismissed={() => afterClose.current()}
+    >
       {/* Backdrop tap = go back to the previous question */}
-      <Pressable style={sheet.backdrop} onPress={onClose}>
-        <Pressable
-          style={[sheet.sheet, { paddingBottom: sy(28) + Math.max(insets.bottom, sy(12)) }]}
-          onPress={() => {}}
-        >
+      <View style={[sheet.sheet, { paddingBottom: sy(28) + Math.max(insets.bottom, sy(12)) }]}>
           <Text style={sheet.title}>{t('onboarding.numberOfPeople')}</Text>
           <View style={sheet.row}>
-            <Pressable
+            <PressableScale
               onPress={() => setCount((c) => Math.max(2, c - 1))}
               style={sheet.stepBtn}
               hitSlop={12}
             >
               <SvgXml xml={MINUS_SVG} width={sx(24)} height={sx(24)} />
-            </Pressable>
+            </PressableScale>
             <Text style={sheet.value}>{count}</Text>
-            <Pressable
+            <PressableScale
               onPress={() => setCount((c) => Math.min(100, c + 1))}
               style={sheet.stepBtn}
               hitSlop={12}
             >
               <SvgXml xml={PLUS_SVG} width={sx(24)} height={sx(24)} />
-            </Pressable>
+            </PressableScale>
           </View>
-          <PressableScale onPress={() => onConfirm(count)} style={sheet.cta}>
+          <PressableScale onPress={() => dismiss(() => onConfirm(count))} style={sheet.cta}>
             <Text style={sheet.ctaText}>{t('common.confirm')}</Text>
           </PressableScale>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </AnimatedModal>
   );
 }
 
 const sheet = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 26, 96, 0.35)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: '#ffffff',
     borderTopLeftRadius: sx(28),

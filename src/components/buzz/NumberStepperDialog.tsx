@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { AnimatedModal } from '../AnimatedModal';
 
 type Props = {
   visible: boolean;
@@ -29,9 +30,7 @@ export function NumberStepperDialog({
   const [value, setValue] = useState(initial);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable style={styles.scrim} onPress={onCancel} />
-      <View style={styles.wrap} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onCancel} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
         <View style={[styles.sheet, { paddingBottom: spacing[6] + insets.bottom }]}>
           <Text style={styles.title}>{title}</Text>
           <View style={styles.stepper}>
@@ -50,14 +49,11 @@ export function NumberStepperDialog({
             <Text style={styles.confirmText}>{t('common.confirm')}</Text>
           </Pressable>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,25,43,0.4)' },
-  wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.gray[100],
     borderTopLeftRadius: radius['2xl'],

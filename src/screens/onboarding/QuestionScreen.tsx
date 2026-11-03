@@ -27,6 +27,7 @@ import { OnboardingQuestion } from '../../api/onboarding';
 import { onboardingSource } from '../../assets/onboardingAssets';
 import { ONBOARDING_ICON_SOURCES, AVATAR_SOURCE } from '../../assets/onboardingIcons';
 import { LottieEdgeFeather, LottieHalo } from '../../components/LottieEdgeFeather';
+import { PressableScale } from '../../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -101,14 +102,14 @@ export function QuestionScreen({
       {/* Header: back button only — the step progress indicator was removed;
           a new loader will take its place. */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           onPress={onBack}
           disabled={!canGoBack}
           hitSlop={8}
           style={[styles.backBtnContainer, !canGoBack && { display: 'none' }]}
         >
           <Image source={BACK_BTN} style={styles.backBtn} resizeMode="contain" />
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* Question bubble — walking-bird Lottie on the left (Onboarding_Purpose
@@ -149,7 +150,7 @@ export function QuestionScreen({
         {question.helperText ? (
           <Text style={styles.helperText}>{question.helperText}</Text>
         ) : null}
-        <Pressable
+        <PressableScale
           onPress={onConfirm}
           disabled={!canConfirm}
           style={[styles.cta, canConfirm ? styles.ctaOn : styles.ctaOff]}
@@ -157,7 +158,7 @@ export function QuestionScreen({
           <Text style={[styles.ctaText, canConfirm ? styles.ctaTextOn : styles.ctaTextOff]}>
             Confirm
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );
@@ -180,7 +181,7 @@ function renderList(
         const isSel = selected.includes(opt.id);
         const iconSrc = opt.iconAsset ? ONBOARDING_ICON_SOURCES[opt.iconAsset] : undefined;
         return (
-          <Pressable
+          <PressableScale
             key={opt.id}
             onPress={() => onToggle(opt.id)}
             style={[styles.listRow, isSel && styles.listRowSel]}
@@ -203,7 +204,7 @@ function renderList(
             ) : isSel ? (
               <Ionicons name="checkmark-circle" size={sx(22)} color={colors.blue[500]} />
             ) : null}
-          </Pressable>
+          </PressableScale>
         );
       })}
     </ScrollView>
@@ -229,7 +230,7 @@ function renderGrid(
             const isSel = selected.includes(opt.id);
             const iconSrc = opt.iconAsset ? ONBOARDING_ICON_SOURCES[opt.iconAsset] : undefined;
             return (
-              <Pressable
+              <PressableScale
                 key={opt.id}
                 onPress={() => onToggle(opt.id)}
                 style={[
@@ -255,7 +256,7 @@ function renderGrid(
                   ) : null}
                 </View>
                 <Text style={styles.gridLabel}>{opt.label}</Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -305,9 +306,9 @@ function WheelRow({
   });
   return (
     <Animated.View style={[styles.wheelItem, style]}>
-      <Pressable style={styles.wheelItemPress} onPress={onPress}>
+      <PressableScale style={styles.wheelItemPress} onPress={onPress}>
         <Text style={[styles.wheelText, selected && styles.wheelTextSel]}>{label}</Text>
-      </Pressable>
+      </PressableScale>
     </Animated.View>
   );
 }

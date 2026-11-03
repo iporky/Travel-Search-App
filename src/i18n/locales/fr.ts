@@ -560,6 +560,9 @@ const fr = {
     followUpPlaceholder: 'Posez une question complémentaire',
   },
   signIn: {
+    continueWithGoogle: 'Continuer avec Google',
+    continueWithFacebook: 'Continuer avec Facebook',
+    continueWithApple: 'Continuer avec Apple',
     line1: 'On vous aide à',
     line2Prefix: 'découvrir la',
     line2Bold: 'Corée',

@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import {
   Dimensions,
   GestureResponderEvent,
-  Pressable,
   StyleProp,
   StyleSheet,
   Text,
@@ -32,6 +31,7 @@ import {
   BUZZ_TOP_CLOUD_SVG,
   BUZZ_BOTTOM_CLOUD_SVG,
 } from '../../assets/screen3Buzz';
+import { PressableScale } from '../../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -128,7 +128,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
   const lineStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   return (
-    <Pressable style={styles.root} onPress={onPress}>
+    <PressableScale style={styles.root} onPress={onPress}>
       {/* Soft radial glow. */}
       <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(360) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
         <Defs>
@@ -209,7 +209,7 @@ export function SplashWelcome3({ onPress, active }: Props) {
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

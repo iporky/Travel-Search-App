@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Dimensions, GestureResponderEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, GestureResponderEvent, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -15,6 +15,7 @@ import Svg, { Defs, Ellipse, RadialGradient, Stop, SvgXml } from 'react-native-s
 import { useTranslation } from 'react-i18next';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
 import { PAY_CARD_BIRD_SVG, PAY_JUMP_SVG, PAY_ATM_SVG } from '../../assets/screen4Pay';
+import { PressableScale } from '../../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -66,7 +67,7 @@ export function SplashWelcome4({ onPress, active }: Props) {
   }));
 
   return (
-    <Pressable style={styles.root} onPress={onPress}>
+    <PressableScale style={styles.root} onPress={onPress}>
       {/* Soft radial glow behind the scene. */}
       <Svg style={{ position: 'absolute', left: (W - sx(470)) / 2, top: sy(362) - sy(215), width: sx(470), height: sy(430) }} pointerEvents="none">
         <Defs>
@@ -111,7 +112,7 @@ export function SplashWelcome4({ onPress, active }: Props) {
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
       </Animated.View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

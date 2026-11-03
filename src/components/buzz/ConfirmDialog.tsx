@@ -1,6 +1,8 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 type Props = {
   visible: boolean;
@@ -30,14 +32,7 @@ export function ConfirmDialog({
   const twoButton = cancelLabel != null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel ?? onConfirm}
-    >
-      <Pressable style={styles.scrim} onPress={onCancel} />
-      <View style={styles.center} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onCancel ?? onConfirm} variant="dialog" scrimColor="rgba(29,25,43,0.45)" dismissOnScrim={onCancel != null}>
         <View style={styles.card}>
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
@@ -46,35 +41,29 @@ export function ConfirmDialog({
 
           {twoButton ? (
             <View style={styles.buttonRow}>
-              <Pressable style={[styles.button, styles.cancelBtn]} onPress={onCancel}>
+              <PressableScale style={[styles.button, styles.cancelBtn]} onPress={onCancel}>
                 <Text style={styles.cancelText}>{cancelLabel}</Text>
-              </Pressable>
-              <Pressable
+              </PressableScale>
+              <PressableScale
                 style={[styles.button, destructive ? styles.destructiveBtn : styles.primaryBtn]}
                 onPress={onConfirm}
               >
                 <Text style={styles.onAccentText}>{confirmLabel}</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           ) : (
             <View style={styles.ctaWrap}>
-              <Pressable style={styles.ctaBtn} onPress={onConfirm}>
+              <PressableScale style={styles.ctaBtn} onPress={onConfirm}>
                 <Text style={styles.onAccentText}>{confirmLabel}</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           )}
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(29,25,43,0.45)',
-  },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // Figma Dialog (11336:76233): 300 wide, radius 24, header pt 28 / px 20.
   card: {
     width: 300,

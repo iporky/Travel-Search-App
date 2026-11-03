@@ -564,6 +564,9 @@ const en = {
     followUpPlaceholder: 'Ask for a follow up question',
   },
   signIn: {
+    continueWithGoogle: 'Continue with Google',
+    continueWithFacebook: 'Continue with Facebook',
+    continueWithApple: 'Continue with Apple',
     line1: "Let's get you",
     line2Prefix: 'around',
     line2Bold: 'Korea',

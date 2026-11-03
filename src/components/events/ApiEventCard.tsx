@@ -6,6 +6,7 @@ import { BookmarkButton } from './BookmarkButton';
 import Svg, { Path } from 'react-native-svg';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { ApiEvent } from '../../api/events';
+import { PressableScale } from '../PressableScale';
 
 // Figma "Buzz/Eventcard" (node 10352:31688), as laid out in the Vibes feed
 // (11478:76666). 346×142 unit:
@@ -136,14 +137,14 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
         ) : null}
       </View>
       <View style={styles.bottomRow}>
-        <Pressable style={styles.likeBtn} hitSlop={6} onPress={onToggleLike}>
+        <PressableScale style={styles.likeBtn} hitSlop={6} onPress={onToggleLike}>
           <Ionicons
             name={event.like_status ? 'heart' : 'heart-outline'}
             size={18}
             color={event.like_status ? colors.red[100] : colors.gray[700]}
           />
           <Text style={styles.likeCount}>{event.like_count}</Text>
-        </Pressable>
+        </PressableScale>
       </View>
       {/* Icon/Save — top-right of the info block. */}
       <BookmarkButton
@@ -157,7 +158,7 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
   );
 
   return (
-    <Pressable style={[styles.card, { width }]} onPress={onPress}>
+    <PressableScale style={[styles.card, { width }]} onPress={onPress}>
       {/* White panel: from x=126 (left variant) / to x=220 (right variant). */}
       <View
         style={[
@@ -167,7 +168,7 @@ export function ApiEventCard({ event, index, width, onPress, onToggleLike, onTog
       />
       {photo}
       {info}
-    </Pressable>
+    </PressableScale>
   );
 }
 

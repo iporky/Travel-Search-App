@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { colors, spacing } from '../../theme/tokens';
 import { MAX_INTERESTS } from './InterestChips';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 // Figma "Confirmation Modal" (12276:94687) — Add Custom Interest:
 // 300 wide, #fefefe, radius 24; title Heading/24/SemiBold "Add custom
@@ -32,9 +34,7 @@ export function AddInterestModal({ visible, onClose, onAdd }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.center} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="dialog" scrimColor="rgba(0,0,0,0.6)">
         <View style={styles.card}>
           <View style={styles.header}>
             <Text style={styles.title}>{t('profile.addInterestTitle')}</Text>
@@ -54,7 +54,7 @@ export function AddInterestModal({ visible, onClose, onAdd }: Props) {
               onSubmitEditing={submit}
             />
           </View>
-          <Pressable
+          <PressableScale
             style={({ pressed }) => [styles.textBtn, pressed && styles.textBtnPressed]}
             onPress={submit}
             disabled={!text.trim()}
@@ -62,16 +62,13 @@ export function AddInterestModal({ visible, onClose, onAdd }: Props) {
             <Text style={[styles.textBtnLabel, !text.trim() && styles.textBtnDisabled]}>
               {t('profile.add')}
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     width: 300,
     backgroundColor: colors.surface.card,

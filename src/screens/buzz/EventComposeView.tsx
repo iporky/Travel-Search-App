@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { MiniCalendar } from '../../components/buzz/MiniCalendar';
 import { NumberStepperDialog } from '../../components/buzz/NumberStepperDialog';
+import { AnimatedModal } from '../../components/AnimatedModal';
 
 export type EventDraft = {
   title: string;
@@ -191,9 +191,7 @@ export function EventComposeView({ initial, editing, onBack, onSubmit }: Props) 
       </View>
 
       {/* Date picker */}
-      <Modal visible={showCalendar} transparent animationType="slide" onRequestClose={() => setShowCalendar(false)}>
-        <Pressable style={styles.scrim} onPress={() => setShowCalendar(false)} />
-        <View style={styles.calendarWrap} pointerEvents="box-none">
+      <AnimatedModal visible={showCalendar} onRequestClose={() => setShowCalendar(false)} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
           <MiniCalendar
             selected={dateDay}
             onSelect={(day, label) => {
@@ -202,8 +200,7 @@ export function EventComposeView({ initial, editing, onBack, onSubmit }: Props) 
               setShowCalendar(false);
             }}
           />
-        </View>
-      </Modal>
+      </AnimatedModal>
 
       <NumberStepperDialog
         visible={showPeople}
@@ -346,6 +343,4 @@ const styles = StyleSheet.create({
     letterSpacing: -0.16,
     color: colors.surface.default,
   },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,25,43,0.4)' },
-  calendarWrap: { flex: 1, justifyContent: 'flex-end', padding: spacing[5], paddingBottom: spacing[10] },
 });

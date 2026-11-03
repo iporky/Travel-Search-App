@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Dimensions,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,11 +9,13 @@ import {
 } from 'react-native';
 import { PressableScale as Pressable } from '../components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { AppLanguage, LANGUAGES, useLanguage } from '../context/LanguageContext';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
+import { AnimatedModal } from '../components/AnimatedModal';
+import { PressableScale } from '../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -35,6 +36,10 @@ export function LanguageScreen({ visible, onClose }: Props) {
   const { t } = useTranslation();
   // Modal windows don't resize for the keyboard on Android — lift the CTA.
   const keyboardHeight = useKeyboardHeight();
+  // The app-level insets, not a SafeAreaView inside the Modal: a Modal
+  // window's own insets arrive a few frames after it opens, and the late
+  // re-layout showed as the CTA jumping at the end of the slide.
+  const insets = useSafeAreaInsets();
   const { language, setLanguage } = useLanguage();
   const [pending, setPending] = useState<AppLanguage>(language);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -63,14 +68,14 @@ export function LanguageScreen({ visible, onClose }: Props) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={close}>
+    <AnimatedModal visible={visible} variant="page" onRequestClose={close} statusBarTranslucent>
       <LinearGradient colors={['#eaf4ff', '#f2f9ff']} style={StyleSheet.absoluteFill} />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={[styles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* Top bar */}
         <View style={styles.topBar}>
-          <Pressable onPress={close} hitSlop={10} style={styles.topBtn}>
+          <PressableScale onPress={close} hitSlop={10} style={styles.topBtn}>
             <Ionicons name="chevron-back" size={sx(22)} color="#1d192b" />
-          </Pressable>
+          </PressableScale>
 
           {searchOpen ? (
             <TextInput
@@ -85,7 +90,7 @@ export function LanguageScreen({ visible, onClose }: Props) {
             <Text style={styles.title}>{t('language.select')}</Text>
           )}
 
-          <Pressable
+          <PressableScale
             onPress={() => {
               if (searchOpen) setQuery('');
               setSearchOpen((s) => !s);
@@ -94,7 +99,7 @@ export function LanguageScreen({ visible, onClose }: Props) {
             style={styles.topBtn}
           >
             <Ionicons name={searchOpen ? 'close' : 'search'} size={sx(20)} color="#1d192b" />
-          </Pressable>
+          </PressableScale>
         </View>
 
         {/* Language rows */}
@@ -107,7 +112,7 @@ export function LanguageScreen({ visible, onClose }: Props) {
           {list.map((lang) => {
             const selected = lang.code === pending.code;
             return (
-              <Pressable
+              <PressableScale
                 key={lang.code}
                 onPress={() => setPending(lang)}
                 style={[styles.row, selected && styles.rowSelected]}
@@ -118,19 +123,19 @@ export function LanguageScreen({ visible, onClose }: Props) {
                     <Ionicons name="checkmark" size={sx(15)} color="#fff" />
                   </View>
                 ) : null}
-              </Pressable>
+              </PressableScale>
             );
           })}
         </ScrollView>
 
         {/* Bottom CTA */}
         <View style={[styles.bottomBar, { paddingBottom: keyboardHeight }]}>
-          <Pressable onPress={confirm} style={styles.cta}>
+          <PressableScale onPress={confirm} style={styles.cta}>
             <Text style={styles.ctaText}>{t('common.confirm')}</Text>
-          </Pressable>
+          </PressableScale>
         </View>
-      </SafeAreaView>
-    </Modal>
+      </View>
+    </AnimatedModal>
   );
 }
 

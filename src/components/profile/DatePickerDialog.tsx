@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { colors, spacing } from '../../theme/tokens';
 import { useLanguage } from '../../context/LanguageContext';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 // Figma "Profile_DatePicker" → Paper (12276:94793): the MUI date picker with
 // only the corner radius adjusted. 335 wide, #fefefe, radius 20, soft shadow.
@@ -96,9 +98,7 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
   }, [maxToday, today]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.center} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="dialog" scrimColor="rgba(0,0,0,0.6)">
         <View style={styles.paper}>
           <View style={styles.header}>
             <Text style={styles.overline}>{t('profile.selectDate')}</Text>
@@ -106,16 +106,16 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
           </View>
 
           <View style={styles.monthRow}>
-            <Pressable style={styles.monthLabelBtn} onPress={() => setYearMode((v) => !v)} hitSlop={6}>
+            <PressableScale style={styles.monthLabelBtn} onPress={() => setYearMode((v) => !v)} hitSlop={6}>
               <Text style={styles.monthLabel}>{monthLabel}</Text>
               <MaterialIcons name={yearMode ? 'arrow-drop-up' : 'arrow-drop-down'} size={24} color="rgba(0,0,0,0.6)" />
-            </Pressable>
+            </PressableScale>
             {!yearMode && (
               <View style={styles.nav}>
-                <Pressable style={styles.navBtn} hitSlop={6} onPress={() => shiftMonth(-1)}>
+                <PressableScale style={styles.navBtn} hitSlop={6} onPress={() => shiftMonth(-1)}>
                   <MaterialIcons name="chevron-left" size={24} color="rgba(0,0,0,0.6)" />
-                </Pressable>
-                <Pressable
+                </PressableScale>
+                <PressableScale
                   style={styles.navBtn}
                   hitSlop={6}
                   onPress={() => shiftMonth(1)}
@@ -126,7 +126,7 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
                     size={24}
                     color={maxToday && view.y === today.getFullYear() && view.m === today.getMonth() ? 'rgba(0,0,0,0.26)' : 'rgba(0,0,0,0.6)'}
                   />
-                </Pressable>
+                </PressableScale>
               </View>
             )}
           </View>
@@ -136,7 +136,7 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
               {years.map((y) => {
                 const active = y === view.y;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={y}
                     style={[styles.yearCell, active && styles.yearCellActive]}
                     onPress={() => {
@@ -146,7 +146,7 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
                     }}
                   >
                     <Text style={[styles.yearText, active && styles.yearTextActive]}>{y}</Text>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </ScrollView>
@@ -165,7 +165,7 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
                   const disabled = isFuture(d);
                   const sel = isPicked(d);
                   return (
-                    <Pressable
+                    <PressableScale
                       key={i}
                       style={[styles.cell, sel && styles.cellSelected, !sel && isToday(d) && styles.cellToday]}
                       disabled={disabled}
@@ -175,23 +175,20 @@ export function DatePickerDialog({ visible, value, onSelect, onClose, maxToday =
                       }}
                     >
                       <Text style={[styles.day, disabled && styles.dayDisabled, sel && styles.daySelected]}>{d}</Text>
-                    </Pressable>
+                    </PressableScale>
                   );
                 })}
               </View>
             </>
           )}
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const CELL = 36;
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   paper: {
     width: 335,
     minHeight: 456,

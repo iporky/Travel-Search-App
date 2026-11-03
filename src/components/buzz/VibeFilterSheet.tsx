@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { EMPTY_FILTERS, VibeFilters } from '../../types/vibes';
 import { vibeFilterOptions } from '../../mocks/vibes';
 import { MiniCalendar } from './MiniCalendar';
+import { AnimatedModal } from '../AnimatedModal';
 
 type Props = {
   visible: boolean;
@@ -53,9 +54,7 @@ export function VibeFilterSheet({ visible, initial, onClose, onApply }: Props) {
     setF((cur) => ({ ...cur, [key]: cur[key] === v ? null : v }));
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.wrap} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
         <View style={styles.sheet}>
           <View style={styles.handleRow}>
             <View style={styles.handle} />
@@ -129,16 +128,13 @@ export function VibeFilterSheet({ visible, initial, onClose, onApply }: Props) {
             </Pressable>
           </View>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,25,43,0.4)' },
-  wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    maxHeight: '90%',
+    maxHeight: Math.round(Dimensions.get('window').height * 0.9),
     backgroundColor: colors.surface.default,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,

@@ -560,6 +560,9 @@ const th = {
     followUpPlaceholder: 'ถามคำถามเพิ่มเติม',
   },
   signIn: {
+    continueWithGoogle: 'ดำเนินการต่อด้วย Google',
+    continueWithFacebook: 'ดำเนินการต่อด้วย Facebook',
+    continueWithApple: 'ดำเนินการต่อด้วย Apple',
     line1: 'ให้เราพาคุณ',
     line2Prefix: 'เที่ยวทั่ว',
     line2Bold: 'เกาหลี',

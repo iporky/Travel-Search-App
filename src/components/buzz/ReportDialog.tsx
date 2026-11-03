@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { AnimatedModal } from '../AnimatedModal';
 
 type Props = {
   visible: boolean;
@@ -19,9 +20,7 @@ export function ReportDialog({ visible, onCancel, onSubmit }: Props) {
   const [selected, setSelected] = useState<string>(REASON_KEYS[0]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <Pressable style={styles.scrim} onPress={onCancel} />
-      <View style={styles.center} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onCancel} variant="dialog" scrimColor="rgba(29,25,43,0.45)">
         <View style={styles.card}>
           <Text style={styles.title}>{t('report.title')}</Text>
 
@@ -51,17 +50,11 @@ export function ReportDialog({ visible, onCancel, onSubmit }: Props) {
             </Pressable>
           </View>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(29,25,43,0.45)',
-  },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     width: '88%',
     maxWidth: 340,

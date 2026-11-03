@@ -6,7 +6,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,6 +41,7 @@ import {
 import { AddInterestModal } from '../../components/profile/AddInterestModal';
 import { ErrorToast } from '../../components/profile/ErrorToast';
 import { DatePickerDialog, parseIsoDate } from '../../components/profile/DatePickerDialog';
+import { PressableScale } from '../../components/PressableScale';
 
 // Figma "Profile for Aug release" (section 12276:93796, Aug revision) —
 // Profile_Default 12322:53795 / Profile_BdaySelected 12322:54175 /
@@ -429,7 +429,7 @@ export function ProfileMain({ onOpenSettings }: Props) {
             About section is editing (website "Change avatar"). */}
         <View style={styles.identity}>
           <View style={styles.avatarBox}>
-            <Pressable
+            <PressableScale
               style={styles.avatarWrap}
               onPress={aboutEditing && !avatarBusy ? choosePhoto : undefined}
               disabled={!aboutEditing || avatarBusy}
@@ -440,11 +440,11 @@ export function ProfileMain({ onOpenSettings }: Props) {
                   <ActivityIndicator color={colors.surface.default} />
                 </View>
               )}
-            </Pressable>
+            </PressableScale>
             {aboutEditing && (
-              <Pressable style={styles.avatarBadge} hitSlop={8} onPress={choosePhoto} disabled={avatarBusy}>
+              <PressableScale style={styles.avatarBadge} hitSlop={8} onPress={choosePhoto} disabled={avatarBusy}>
                 <MaterialIcons name="photo-camera" size={18} color={colors.surface.default} />
-              </Pressable>
+              </PressableScale>
             )}
           </View>
           <Text style={styles.username} numberOfLines={1}>

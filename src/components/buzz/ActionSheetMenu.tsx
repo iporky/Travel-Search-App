@@ -1,8 +1,10 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 export type SheetItem = {
   label: string;
@@ -25,13 +27,11 @@ export function ActionSheetMenu({ visible, items, onClose }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.wrap} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
         <View style={styles.sheet}>
           <View style={styles.group}>
             {items.map((item) => (
-              <Pressable
+              <PressableScale
                 key={item.label}
                 style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
                 onPress={() => {
@@ -42,30 +42,24 @@ export function ActionSheetMenu({ visible, items, onClose }: Props) {
                 <Text style={item.destructive ? styles.destructiveText : styles.itemText}>
                   {item.label}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
 
           <View style={[styles.cancelGroup, { paddingBottom: insets.bottom }]}>
-            <Pressable
+            <PressableScale
               style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
               onPress={onClose}
             >
               <Text style={styles.itemText}>{t('common.cancel')}</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(29,25,43,0.4)',
-  },
-  wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.surface.default,
     borderTopLeftRadius: radius.lg,

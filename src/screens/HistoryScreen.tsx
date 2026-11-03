@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -31,6 +30,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { applyRecentlyViewed, useHistorySections, useConversations } from '../hooks/useConversations';
 import { loadViewed, markViewed, ViewedMap } from '../utils/historyViewed';
 import { track } from '../api/tracking';
+import { PressableScale } from '../components/PressableScale';
 
 // Figma "History for Aug release" (section 12354:55424 revision) — Kiki AI history:
 //   • Header: "History" (Heading 35/ExtraBold) + search icon.
@@ -151,9 +151,9 @@ export function HistoryScreen({ onFullScreen, onAskFollowup }: Props) {
     <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t('history.title')}</Text>
-        <Pressable style={styles.searchBtn} hitSlop={6} onPress={() => setMode({ kind: 'search' })}>
+        <PressableScale style={styles.searchBtn} hitSlop={6} onPress={() => setMode({ kind: 'search' })}>
           <Ionicons name="search" size={24} color={colors.icon.primary} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <View style={styles.chipsRow}>
@@ -182,9 +182,9 @@ export function HistoryScreen({ onFullScreen, onAskFollowup }: Props) {
       ) : history.error && history.items.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.muted}>{t('history.loadError')}</Text>
-          <Pressable style={styles.retryBtn} onPress={history.refresh}>
+          <PressableScale style={styles.retryBtn} onPress={history.refresh}>
             <Text style={styles.retryText}>{t('events.retry')}</Text>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <SectionList

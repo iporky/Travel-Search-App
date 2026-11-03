@@ -560,6 +560,9 @@ const zh = {
     followUpPlaceholder: '输入追加问题',
   },
   signIn: {
+    continueWithGoogle: '使用 Google 继续',
+    continueWithFacebook: '使用 Facebook 继续',
+    continueWithApple: '使用 Apple 继续',
     line1: '让我们带你',
     line2Prefix: '畅游',
     line2Bold: '韩国',

@@ -7,14 +7,21 @@ import {
   ImageSourcePropType,
   Keyboard,
   Linking,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SvgXml } from 'react-native-svg';
@@ -45,6 +52,7 @@ import {
   SEARCH_BAR_SEND_SVG,
 } from '../assets/searchBarAssets';
 import { QUICK_ANSWER_CHEVRON_SVG, QUICK_ANSWER_SHARE_SVG } from '../assets/quickAnswerAssets';
+import { PressableScale } from '../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -561,9 +569,9 @@ export function SearchResultsScreen({ request, onBack }: Props) {
       <KeyboardStickyView style={styles.safe}>
         {/* Top bar */}
         <View style={styles.topBar}>
-          <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
+          <PressableScale onPress={onBack} hitSlop={12} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={sx(24)} color="#505d6d" />
-          </Pressable>
+          </PressableScale>
           <Text style={styles.topTitle} numberOfLines={1}>
             {t('search.title')}
           </Text>
@@ -631,7 +639,7 @@ export function SearchResultsScreen({ request, onBack }: Props) {
               }}
             />
             <View style={barExpanded ? styles.barActionsExpanded : styles.barActionsPill}>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Voice input"
                 onPress={openVoice}
@@ -643,8 +651,8 @@ export function SearchResultsScreen({ request, onBack }: Props) {
                   width={sx(24)}
                   height={sx(24)}
                 />
-              </Pressable>
-              <Pressable
+              </PressableScale>
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Send"
                 onPress={() => ask(draft)}
@@ -653,7 +661,7 @@ export function SearchResultsScreen({ request, onBack }: Props) {
                 hitSlop={4}
               >
                 <SvgXml xml={canSend ? SEARCH_BAR_SEND_ACTIVE_SVG : SEARCH_BAR_SEND_SVG} width={sx(48)} height={sx(48)} />
-              </Pressable>
+              </PressableScale>
             </View>
             {!barExpanded ? (
               <Text pointerEvents="none" style={styles.barPlaceholder} numberOfLines={1}>
@@ -674,7 +682,23 @@ export function SearchResultsScreen({ request, onBack }: Props) {
   );
 }
 
+/** Only web links leave the app — a source/CTA URL with any other scheme is ignored. */
+/** The Sources chevron turns over 220 ms instead of flipping. */
+function SourcesChevron({ open }: { open: boolean }) {
+  const turn = useSharedValue(open ? 0 : 180);
+  useEffect(() => {
+    turn.value = withTiming(open ? 0 : 180, { duration: 220 });
+  }, [open, turn]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
+  return (
+    <Animated.View style={[styles.sourcesChevron, style]}>
+      <SvgXml xml={QUICK_ANSWER_CHEVRON_SVG} width={sx(24.7)} height={sx(23.4)} />
+    </Animated.View>
+  );
+}
+
 const openUrl = (url: string) => {
+  if (!/^https?:\/\//i.test(url ?? '')) return;
   Linking.openURL(url).catch(() => {});
 };
 
@@ -780,10 +804,10 @@ function TurnBlock({
                   {rec.body.trim()}
                 </Text>
               ) : null}
-              <Pressable style={styles.ctaBtn} onPress={() => onRecommendationPress(rec)}>
+              <PressableScale style={styles.ctaBtn} onPress={() => onRecommendationPress(rec)}>
                 <Text style={styles.ctaBtnText}>{rec.deep_link_label}</Text>
                 <Ionicons name="arrow-forward" size={sx(13)} color="#fff" />
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
         ))}
@@ -814,14 +838,14 @@ function TurnBlock({
                 </View>
               ) : null}
               {validationError.source ? (
-                <Pressable hitSlop={6} onPress={() => openUrl(validationError.source!)}>
+                <PressableScale hitSlop={6} onPress={() => openUrl(validationError.source!)}>
                   <Text style={styles.validationLink}>{t('search.reference')}</Text>
-                </Pressable>
+                </PressableScale>
               ) : null}
               {validationError.korean_law_url ? (
-                <Pressable hitSlop={6} onPress={() => openUrl(validationError.korean_law_url!)}>
+                <PressableScale hitSlop={6} onPress={() => openUrl(validationError.korean_law_url!)}>
                   <Text style={styles.validationLink}>{t('search.koreanLaw')}</Text>
-                </Pressable>
+                </PressableScale>
               ) : null}
             </View>
           ) : null}
@@ -842,9 +866,9 @@ function TurnBlock({
           {clarification.options.length > 0 ? (
             <View style={styles.clarifyOptions}>
               {clarification.options.map((opt) => (
-                <Pressable key={opt} style={styles.clarifyChip} onPress={() => onAsk(opt)}>
+                <PressableScale key={opt} style={styles.clarifyChip} onPress={() => onAsk(opt)}>
                   <Text style={styles.clarifyChipText}>{opt}</Text>
-                </Pressable>
+                </PressableScale>
               ))}
             </View>
           ) : null}
@@ -872,32 +896,34 @@ function TurnBlock({
               <Text style={styles.listTitle}>{t('search.related')}</Text>
               <View style={styles.listBody}>
                 {followups.map((q, i) => (
-                  <Pressable key={q} style={styles.listRow} onPress={() => onAsk(q)} hitSlop={4}>
+                  <PressableScale key={q} style={styles.listRow} onPress={() => onAsk(q)} hitSlop={4}>
                     <Text style={styles.listNum}>{String(i + 1).padStart(2, '0')}</Text>
                     <Text style={styles.listText}>{q}</Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             </View>
           ) : null}
 
           {sources.length > 0 ? (
-            <View style={styles.listBlock}>
-              <Pressable style={styles.sourcesHeader} onPress={onToggleSources} hitSlop={6}>
+            <Animated.View style={styles.listBlock} layout={LinearTransition.duration(260)}>
+              <PressableScale style={styles.sourcesHeader} onPress={onToggleSources} hitSlop={6}>
                 <Text style={styles.listTitle}>{t('search.sources')}</Text>
-                <View style={[styles.sourcesChevron, !turn.sourcesOpen && styles.sourcesChevronClosed]}>
-                  <SvgXml xml={QUICK_ANSWER_CHEVRON_SVG} width={sx(24.7)} height={sx(23.4)} />
-                </View>
-              </Pressable>
+                <SourcesChevron open={turn.sourcesOpen} />
+              </PressableScale>
               {turn.sourcesOpen ? (
-                <View style={styles.sourcesList}>
+                <Animated.View
+                  style={styles.sourcesList}
+                  entering={FadeIn.duration(220)}
+                  exiting={FadeOut.duration(140)}
+                >
                   {sources.map((src, i) => {
                     // Hermes lacks a full URL implementation — split with a regex.
                     const m = /^https?:\/\/([^/]+)(.*)$/.exec(src.url ?? '');
                     const host = (m?.[1] ?? src.url ?? '').replace(/^www\./, '');
                     const path = (m?.[2] ?? '').replace(/^\//, '').replace(/\/$/, '');
                     return (
-                      <Pressable key={src.index ?? i} style={styles.sourceItem} onPress={() => openUrl(src.url)} hitSlop={4}>
+                      <PressableScale key={src.index ?? i} style={styles.sourceItem} onPress={() => openUrl(src.url)} hitSlop={4}>
                         <View style={styles.sourceRow}>
                           <Text style={styles.sourceNum}>{String(src.index ?? i + 1).padStart(2, '0')}</Text>
                           <Text style={styles.sourceHost} numberOfLines={1}>
@@ -909,27 +935,29 @@ function TurnBlock({
                             {path}
                           </Text>
                         ) : null}
-                      </Pressable>
+                      </PressableScale>
                     );
                   })}
-                </View>
+                </Animated.View>
               ) : null}
-            </View>
+            </Animated.View>
           ) : null}
 
           {/* Share — only once the search has been persisted, since that id
               is what the short link is minted from. */}
           {turn.responseId ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              onPress={onShare}
-              disabled={sharing}
-              hitSlop={10}
-              style={[styles.shareBtn, sharing && styles.shareBtnBusy]}
-            >
-              <SvgXml xml={QUICK_ANSWER_SHARE_SVG} width={sx(30)} height={sx(30)} />
-            </Pressable>
+            <Animated.View layout={LinearTransition.duration(260)} style={styles.shareWrap}>
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Share"
+                onPress={onShare}
+                disabled={sharing}
+                hitSlop={10}
+                style={[styles.shareBtn, sharing && styles.shareBtnBusy]}
+              >
+                <SvgXml xml={QUICK_ANSWER_SHARE_SVG} width={sx(30)} height={sx(30)} />
+              </PressableScale>
+            </Animated.View>
           ) : null}
         </View>
       ) : null}
@@ -1311,7 +1339,6 @@ const styles = StyleSheet.create({
   },
   sourcesHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   sourcesChevron: { width: sx(24.7), height: sx(23.4) },
-  sourcesChevronClosed: { transform: [{ rotate: '180deg' }] },
   sourcesList: { gap: sy(8) },
   sourceItem: { paddingHorizontal: sx(12), gap: sy(4) },
   sourceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: sx(12) },
@@ -1337,6 +1364,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.13,
     color: '#657586',
   },
-  shareBtn: { width: sx(30), height: sx(30), marginTop: sy(12) },
+  shareWrap: { marginTop: sy(12), alignSelf: 'flex-start' },
+  shareBtn: { width: sx(30), height: sx(30) },
   shareBtnBusy: { opacity: 0.5 },
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { HISTORY_CHIP_CARET_SVG } from '../../assets/historyAssets';
 import { ActionSheetMenu } from '../buzz/ActionSheetMenu';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 // Figma History filter chips (12232:59933): `Onboarding/Selection/Chip`
 // overridden for History — 36 tall, radius 12, px 12, bg accent-tertiary
@@ -25,7 +27,7 @@ type ChipProps = {
 
 export function FilterChip({ label, onPress }: ChipProps) {
   return (
-    <Pressable
+    <PressableScale
       style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
       onPress={onPress}
       hitSlop={4}
@@ -34,7 +36,7 @@ export function FilterChip({ label, onPress }: ChipProps) {
       <View style={styles.caret}>
         <SvgXml xml={HISTORY_CHIP_CARET_SVG} width={10} height={6} />
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -92,47 +94,42 @@ export function FilterSelectSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.sheetWrap} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
         <View style={[styles.sheet, { paddingBottom: spacing[4] + insets.bottom }]}>
           <View style={styles.handle} />
           <Text style={styles.sheetTitle}>{title}</Text>
           <ScrollView bounces={false} style={styles.optionScroll}>
             {clearable && (
-              <Pressable style={styles.optionRow} onPress={() => onSelect(null)}>
+              <PressableScale style={styles.optionRow} onPress={() => onSelect(null)}>
                 <Text style={[styles.optionText, { color: colors.text.disabled }]}>
                   {t('history.filters.clear')}
                 </Text>
                 {selected == null && <Ionicons name="checkmark" size={18} color={colors.blue[500]} />}
-              </Pressable>
+              </PressableScale>
             )}
             {options.map((opt) => {
               const isSel = opt.value === selected;
               return (
-                <Pressable key={opt.value} style={styles.optionRow} onPress={() => onSelect(opt.value)}>
+                <PressableScale key={opt.value} style={styles.optionRow} onPress={() => onSelect(opt.value)}>
                   <Text style={[styles.optionText, isSel && styles.optionTextSelected]}>{opt.label}</Text>
                   {isSel && <Ionicons name="checkmark" size={18} color={colors.blue[500]} />}
-                </Pressable>
+                </PressableScale>
               );
             })}
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
   // Generic select sheet
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,25,43,0.4)' },
-  sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.gray[100],
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     paddingTop: spacing[3],
-    maxHeight: '70%',
+    maxHeight: Math.round(Dimensions.get('window').height * 0.7),
   },
   handle: {
     alignSelf: 'center',

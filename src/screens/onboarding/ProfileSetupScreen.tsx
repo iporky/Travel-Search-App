@@ -18,6 +18,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radius } from '../../theme/tokens';
 import { onboardingSource } from '../../assets/onboardingAssets';
+import { PressableScale } from '../../components/PressableScale';
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
 const DESIGN_H = 812;
@@ -216,9 +217,9 @@ export function ProfileSetupScreen({
   return (
     <KeyboardStickyView style={styles.root}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backBtn}>
+        <PressableScale onPress={onBack} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={sx(20)} color={colors.icon.primary} />
-        </Pressable>
+        </PressableScale>
         <Text style={styles.headerTitle}>{editMode ? t('onboarding.editProfile') : t('onboarding.createProfile')}</Text>
       </View>
 
@@ -233,7 +234,7 @@ export function ProfileSetupScreen({
             the circle's overflow clip cut the badge's corner off. Same badge as
             the Profile page (blue, white camera, 2px surface ring). */}
         <View style={styles.avatarArea}>
-          <Pressable style={styles.avatarWrap} onPress={choosePhoto} hitSlop={8}>
+          <PressableScale style={styles.avatarWrap} onPress={choosePhoto} hitSlop={8}>
             <Image
               source={
                 pickedPhoto
@@ -246,10 +247,10 @@ export function ProfileSetupScreen({
               resizeMode="cover"
               onError={() => setPhotoFailed(true)}
             />
-          </Pressable>
-          <Pressable style={styles.cameraBadge} onPress={choosePhoto} hitSlop={8}>
+          </PressableScale>
+          <PressableScale style={styles.cameraBadge} onPress={choosePhoto} hitSlop={8}>
             <MaterialIcons name="photo-camera" size={18} color={colors.surface.default} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={[styles.inputWrap, { borderColor: inputBorderColor }]}> 
@@ -305,9 +306,9 @@ export function ProfileSetupScreen({
             <Text style={styles.takenText}>{t('onboarding.usernameTaken')}</Text>
             <View style={styles.chipsRow}>
               {suggestions.map((s) => (
-                <Pressable key={s} onPress={() => setUsername(s)} style={styles.chip}>
+                <PressableScale key={s} onPress={() => setUsername(s)} style={styles.chip}>
                   <Text style={styles.chipText}>{s}</Text>
-                </Pressable>
+                </PressableScale>
               ))}
             </View>
           </View>
@@ -317,7 +318,7 @@ export function ProfileSetupScreen({
 
       <View style={styles.bottomWrap}>
         <Text style={styles.publicInfo}>{t('onboarding.avatarPublicNote')}</Text>
-        <Pressable
+        <PressableScale
           onPress={() => canConfirm && onConfirm(trimmed, pickedPhoto)}
           disabled={!canConfirm}
           style={[styles.confirmBtn, canConfirm ? styles.confirmBtnOn : styles.confirmBtnOff]}
@@ -325,7 +326,7 @@ export function ProfileSetupScreen({
           <Text style={[styles.confirmText, canConfirm ? styles.confirmTextOn : styles.confirmTextOff]}>
             {editMode ? t('tips.save') : t('common.confirm')}
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </KeyboardStickyView>
   );

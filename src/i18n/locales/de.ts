@@ -560,6 +560,9 @@ const de = {
     followUpPlaceholder: 'Stelle eine Nachfrage',
   },
   signIn: {
+    continueWithGoogle: 'Weiter mit Google',
+    continueWithFacebook: 'Weiter mit Facebook',
+    continueWithApple: 'Weiter mit Apple',
     line1: 'Wir bringen dich',
     line2Prefix: 'durch',
     line2Bold: 'Korea',

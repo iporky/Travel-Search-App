@@ -3,15 +3,14 @@ import {
   ActivityIndicator,
   BackHandler,
   Image,
-  Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SvgXml } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
@@ -26,6 +25,8 @@ import {
   CASHBACK_DETAIL_SOURCE,
   CASHBACK_UPLOAD_ICON_SVG,
 } from '../../assets/cashback';
+import { AnimatedModal } from '../../components/AnimatedModal';
+import { PressableScale } from '../../components/PressableScale';
 
 // Taxi-cashback ("Ride & Shop") flow — Figma "Banner popup" section
 // (12393:85037), opened from the Home banner card:
@@ -52,6 +53,22 @@ export function CashbackFlowScreen({ onClose }: Props) {
   const { t } = useTranslation();
   const { user } = useAuth();
 
+  // Stays mounted while the page slides away; onDismissed hands control back to Home.
+  const [open, setOpen] = useState(true);
+  // App-level insets rather than a SafeAreaView inside the Modal (its own
+  // insets land a few frames late and re-lay out the page mid-slide).
+  const insets = useSafeAreaInsets();
+  // Content mounts after the entrance slide (see AnimatedModal onEntered).
+  const [entered, setEntered] = useState(false);
+  // A bare top bar rides the slide so the pane reads as a page (and back is
+  // tappable) from the first frame; it stays under the step's own identical
+  // bar until that has faded in, so the bar never blinks.
+  const [barPlaceholder, setBarPlaceholder] = useState(true);
+  useEffect(() => {
+    if (!entered) return;
+    const id = setTimeout(() => setBarPlaceholder(false), 280);
+    return () => clearTimeout(id);
+  }, [entered]);
   const [step, setStep] = useState<Step>('detail');
   const [file, setFile] = useState<ReceiptFile | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +80,7 @@ export function CashbackFlowScreen({ onClose }: Props) {
   const emailInputRef = useRef<TextInput>(null);
 
   const goBack = () => {
-    if (step === 'detail') onClose();
+    if (step === 'detail') setOpen(false);
     else if (step === 'upload') setStep('detail');
     else if (step === 'voucher') setStep('upload');
     else setStep('voucher');
@@ -139,7 +156,7 @@ export function CashbackFlowScreen({ onClose }: Props) {
   const cta = (label: string, opts: { disabled?: boolean; caption?: string; onPress: () => void }) => (
     <View style={styles.bottomBar}>
       {opts.caption ? <Text style={styles.ctaCaption}>{opts.caption}</Text> : null}
-      <Pressable
+      <PressableScale
         style={({ pressed }) => [
           styles.ctaBtn,
           opts.disabled && styles.ctaBtnDisabled,
@@ -149,7 +166,7 @@ export function CashbackFlowScreen({ onClose }: Props) {
         disabled={opts.disabled}
       >
         <Text style={[styles.ctaText, opts.disabled && styles.ctaTextDisabled]}>{label}</Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 
@@ -159,13 +176,13 @@ export function CashbackFlowScreen({ onClose }: Props) {
     onPress: () => void;
     children: React.ReactNode;
   }) => (
-    <Pressable
+    <PressableScale
       key={opts.key}
       style={[styles.row, opts.selected && styles.rowSelected]}
       onPress={opts.onPress}
     >
       {opts.children}
-    </Pressable>
+    </PressableScale>
   );
 
   // ── Steps ──────────────────────────────────────────────────────────────────
@@ -212,7 +229,7 @@ export function CashbackFlowScreen({ onClose }: Props) {
         </View>
       ) : (
         <View style={styles.uploadWrap}>
-          <Pressable style={styles.uploadCard} onPress={pickFile}>
+          <PressableScale style={styles.uploadCard} onPress={pickFile}>
             <SvgXml xml={CASHBACK_UPLOAD_ICON_SVG} width={60} height={60} />
             <View style={styles.uploadTexts}>
               {file ? (
@@ -229,7 +246,7 @@ export function CashbackFlowScreen({ onClose }: Props) {
                 </>
               )}
             </View>
-          </Pressable>
+          </PressableScale>
         </View>
       )}
       {!uploading &&
@@ -332,20 +349,48 @@ export function CashbackFlowScreen({ onClose }: Props) {
     // page: no tab bar, CTA at the true screen bottom. Rendering inline inside
     // Home's content area both showed the tab bar and double-counted the top
     // inset (the shell already applies it), pushing everything down.
-    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={goBack}>
+    <AnimatedModal
+      visible={open}
+      variant="page"
+      statusBarTranslucent
+      onRequestClose={goBack}
+      onEntered={() => setEntered(true)}
+      onDismissed={onClose}
+    >
       <View style={styles.root}>
         <View style={[StyleSheet.absoluteFill, styles.flatBg]} />
-        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-        {step === 'detail' && detailStep}
-        {step === 'upload' && uploadStep}
-        {step === 'voucher' && voucherStep}
-        {step === 'email' && emailStep}
-      </SafeAreaView>
+        <View
+          style={[
+            styles.safe,
+            { paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right },
+          ]}
+        >
+          {/* The page slides in with only its top bar; the step (with its
+              large artwork) mounts and fades in once the slide has landed, so
+              the motion itself never competes with image decoding. */}
+          {barPlaceholder ? (
+            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+              <TopBar title="" onBack={goBack} />
+            </View>
+          ) : null}
+          {entered ? (
+            <Animated.View style={styles.safe} entering={FadeIn.duration(240)}>
+              {step === 'detail' && detailStep}
+              {step === 'upload' && uploadStep}
+              {step === 'voucher' && voucherStep}
+              {step === 'email' && emailStep}
+            </Animated.View>
+          ) : null}
+        </View>
 
       {/* Error dialogs (upload failure / invalid email). */}
-      <Modal visible={errorDialog != null} transparent animationType="fade" onRequestClose={() => setErrorDialog(null)}>
-        <View style={styles.scrim}>
-          <View style={styles.dialog}>
+      <AnimatedModal
+        visible={errorDialog != null}
+        variant="dialog"
+        scrimColor="rgba(29, 25, 43, 0.4)"
+        onRequestClose={() => setErrorDialog(null)}
+      >
+        <View style={styles.dialog}>
             <Text style={styles.dialogTitle}>
               {errorDialog === 'email' ? t('cashback.invalidEmailTitle') : t('cashback.uploadErrorTitle')}
             </Text>
@@ -353,10 +398,10 @@ export function CashbackFlowScreen({ onClose }: Props) {
               {errorDialog === 'email' ? t('cashback.invalidEmailBody') : t('cashback.uploadErrorBody')}
             </Text>
             <View style={styles.dialogButtons}>
-              <Pressable style={styles.dialogCancel} onPress={() => setErrorDialog(null)}>
+              <PressableScale style={styles.dialogCancel} onPress={() => setErrorDialog(null)}>
                 <Text style={styles.dialogCancelText}>{t('common.cancel')}</Text>
-              </Pressable>
-              <Pressable
+              </PressableScale>
+              <PressableScale
                 style={styles.dialogDanger}
                 onPress={() => {
                   const which = errorDialog;
@@ -371,33 +416,36 @@ export function CashbackFlowScreen({ onClose }: Props) {
                 }}
               >
                 <Text style={styles.dialogDangerText}>{t('cashback.tryAgain')}</Text>
-              </Pressable>
+              </PressableScale>
             </View>
-          </View>
         </View>
-      </Modal>
+      </AnimatedModal>
 
       {/* Success dialog — Confirm closes the whole flow back to Home. */}
-      <Modal visible={successOpen} transparent animationType="fade" onRequestClose={() => {}}>
-        <View style={styles.scrim}>
-          <View style={styles.dialog}>
+      <AnimatedModal
+        visible={successOpen}
+        variant="dialog"
+        scrimColor="rgba(29, 25, 43, 0.4)"
+        dismissOnScrim={false}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.dialog}>
             <Text style={[styles.dialogTitle, styles.dialogTitleCenter]}>{t('cashback.successTitle')}</Text>
             <Text style={[styles.dialogBody, styles.dialogBodyCenter]}>{t('cashback.successBody')}</Text>
             <Image source={CASHBACK_CONFIRMATION_SOURCE} style={styles.successImage} resizeMode="contain" />
-            <Pressable
+            <PressableScale
               style={[styles.ctaBtn, styles.dialogConfirm]}
               onPress={() => {
                 setSuccessOpen(false);
-                onClose();
+                setOpen(false);
               }}
             >
               <Text style={styles.ctaText}>{t('cashback.confirm')}</Text>
-            </Pressable>
-          </View>
+            </PressableScale>
         </View>
-      </Modal>
+      </AnimatedModal>
       </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 

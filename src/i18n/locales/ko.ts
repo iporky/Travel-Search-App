@@ -560,6 +560,9 @@ const ko = {
     followUpPlaceholder: '추가 질문을 입력하세요',
   },
   signIn: {
+    continueWithGoogle: 'Google로 계속하기',
+    continueWithFacebook: 'Facebook으로 계속하기',
+    continueWithApple: 'Apple로 계속하기',
     line1: '한국 여행을',
     line2Prefix: '함께',
     line2Bold: '시작해요',

@@ -7,7 +7,6 @@ import {
   Keyboard,
   PixelRatio,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,6 +41,7 @@ import { onboardingSource } from '../assets/onboardingAssets';
 import { ReceiptStepsBanner } from '../components/ReceiptStepsBanner';
 import { CashbackFlowScreen } from './cashback/CashbackFlowScreen';
 import { track } from '../api/tracking';
+import { PressableScale } from '../components/PressableScale';
 
 const { width: W, height: H } = Dimensions.get('window');
 const DESIGN_W = 375;
@@ -329,17 +329,17 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
             />
 
             {query.trim() ? (
-              <Pressable onPress={handleSubmit} style={styles.pillIconBtn} hitSlop={8}>
+              <PressableScale onPress={handleSubmit} style={styles.pillIconBtn} hitSlop={8}>
                 <PaperAirplaneIcon
                   size={sx(20)}
                   color="#fff"
                   style={{ transform: [{ rotate: '-45deg' }] }}
                 />
-              </Pressable>
+              </PressableScale>
             ) : (
-              <Pressable onPress={openVoice} style={styles.pillIconBtn} hitSlop={8}>
+              <PressableScale onPress={openVoice} style={styles.pillIconBtn} hitSlop={8}>
                 <SvgXml xml={SEARCH_MIC_SVG} width={sx(22)} height={sx(22)} />
-              </Pressable>
+              </PressableScale>
             )}
           </LinearGradient>
         </Animated.View>
@@ -363,9 +363,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
           />
           <Animated.View entering={FadeInDown.duration(420).delay(40)} style={styles.searchOverlayCard}>
             <View style={styles.searchOverlayTopBar}>
-              <Pressable onPress={closeSearchOverlay} hitSlop={8} style={styles.searchOverlayBackBtn}>
+              <PressableScale onPress={closeSearchOverlay} hitSlop={8} style={styles.searchOverlayBackBtn}>
                 <Ionicons name="chevron-back" size={sx(24)} color={colors.gray[1300]} />
-              </Pressable>
+              </PressableScale>
             </View>
 
             {autocomplete.status === 'idle' ? (
@@ -375,10 +375,10 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
                   {TRENDING_SEARCHES.map((item) => (
                     // Tapping a trending keyword searches it straight away
                     // (Home_TrendingSearch) — it is never staged in the composer.
-                    <Pressable key={item.label} style={styles.overlayChip} onPress={() => runSearch(item.label)}>
+                    <PressableScale key={item.label} style={styles.overlayChip} onPress={() => runSearch(item.label)}>
                       <Text style={styles.overlayChipEmoji}>{item.emoji}</Text>
                       <Text style={styles.overlayChipLabel}>{item.label}</Text>
-                    </Pressable>
+                    </PressableScale>
                   ))}
                 </View>
               </>
@@ -436,9 +436,9 @@ export function HomeScreen({ initialQuery, onInitialQueryConsumed, onFullScreen 
                   returnKeyType="default"
                 />
 
-                <Pressable onPress={handleSubmit} style={styles.overlayComposerRightBtn} hitSlop={8}>
+                <PressableScale onPress={handleSubmit} style={styles.overlayComposerRightBtn} hitSlop={8}>
                   <Ionicons name="arrow-up" size={sx(18)} color="#fff" />
-                </Pressable>
+                </PressableScale>
               </View>
             </Animated.View>
           </Animated.View>
@@ -479,7 +479,7 @@ function SuggestionChip({
   const q = typed.trim();
   const at = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
   return (
-    <Pressable style={styles.overlayChip} onPress={onPress}>
+    <PressableScale style={styles.overlayChip} onPress={onPress}>
       <SvgXml xml={AUTOCOMPLETE_SEARCH_SVG} width={sx(24)} height={sx(24)} />
       <Text style={styles.overlayChipLabel} numberOfLines={1}>
         {at >= 0 ? (
@@ -492,7 +492,7 @@ function SuggestionChip({
           text
         )}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

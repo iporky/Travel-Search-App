@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   SectionList,
   StyleSheet,
   Text,
@@ -28,6 +27,7 @@ import { KeyboardStickyView } from '../../components/KeyboardStickyView';
 import { useLanguage } from '../../context/LanguageContext';
 import { applyRecentlyViewed, useHistorySections, useConversations } from '../../hooks/useConversations';
 import { ViewedMap } from '../../utils/historyViewed';
+import { PressableScale } from '../../components/PressableScale';
 
 // Figma History_SearchResult (12354:55449 / 12354:55525): back arrow +
 // search field (Onboarding/Input/Field), "245 results for "E7 Visa"" line,
@@ -101,9 +101,9 @@ export function HistorySearchScreen({ viewed, onBack, onViewed, onAskFollowup }:
     <KeyboardStickyView style={styles.screen}>
       {/* Onboarding/Navigation/TopBar: back (44) + input field. */}
       <View style={styles.topBar}>
-        <Pressable style={styles.backBtn} hitSlop={8} onPress={onBack}>
+        <PressableScale style={styles.backBtn} hitSlop={8} onPress={onBack}>
           <Ionicons name="chevron-back" size={24} color={colors.gray[1300]} />
-        </Pressable>
+        </PressableScale>
         <View style={styles.inputWrap}>
           <Ionicons name="search" size={22} color={colors.gray[900]} />
           <TextInput
@@ -117,9 +117,9 @@ export function HistorySearchScreen({ viewed, onBack, onViewed, onAskFollowup }:
             autoCorrect={false}
           />
           {query.length > 0 && (
-            <Pressable hitSlop={8} onPress={() => setQuery('')}>
+            <PressableScale hitSlop={8} onPress={() => setQuery('')}>
               <Ionicons name="close-circle" size={18} color={colors.gray[700]} />
-            </Pressable>
+            </PressableScale>
           )}
         </View>
       </View>

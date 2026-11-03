@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -15,6 +15,7 @@ import { ConversationSummary, ConversationTurn } from '../../types/conversation'
 import { TranscriptStatus, useConversationTranscript } from '../../hooks/useConversations';
 import { FormattedSummary } from '../FormattedAnswer';
 import { DotsLoader } from '../DotsLoader';
+import { PressableScale } from '../PressableScale';
 
 // Figma `Suggestion Chip/L`, Aug revision (History_Default 12354:55698 /
 // History_Expanded 12354:55779), now listing Search v2 CONVERSATIONS: every
@@ -88,7 +89,7 @@ function ConversationRowInner({ item, expanded, onToggle, onAskFollowup }: Props
 
   return (
     <View style={[styles.card, pressed && styles.cardPressed]}>
-      <Pressable
+      <PressableScale
         style={styles.headerRow}
         onPress={() => onToggle(item)}
         onPressIn={() => setPressed(true)}
@@ -108,7 +109,7 @@ function ConversationRowInner({ item, expanded, onToggle, onAskFollowup }: Props
         <Animated.View style={[styles.chevron, chevronStyle]}>
           <MaterialIcons name="keyboard-arrow-down" size={24} color={colors.gray[1200]} />
         </Animated.View>
-      </Pressable>
+      </PressableScale>
 
       {mounted && (
         <Animated.View style={[open ? styles.bodyOpen : styles.bodyClosed, bodyFade]}>
@@ -151,9 +152,9 @@ function Transcript({
     return (
       <View style={styles.stateRow}>
         <Text style={styles.stateText}>{t('history.conversationLoadError')}</Text>
-        <Pressable hitSlop={8} onPress={onRetry}>
+        <PressableScale hitSlop={8} onPress={onRetry}>
           <Text style={styles.retryLink}>{t('events.retry')}</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     );
   }
@@ -164,13 +165,16 @@ function Transcript({
       </View>
     );
   }
-  if (turns.length === 0) {
+  // Only turns that actually produced an answer are shown — a question whose
+  // answer never generated (empty content) is dropped from the transcript.
+  const answered = turns.filter((turn) => (turn.answer?.content ?? '').trim().length > 0);
+  if (answered.length === 0) {
     return <Text style={styles.stateText}>{t('history.noAnswer')}</Text>;
   }
   return (
     <View style={styles.chat}>
       {truncated ? <Text style={styles.truncatedNote}>{t('history.earlierMessagesHidden')}</Text> : null}
-      {turns.map((turn) => {
+      {answered.map((turn) => {
         const question = (turn.question?.content ?? '').trim();
         const answer = (turn.answer?.content ?? '').trim();
         const followups = (Array.isArray(turn.followup_questions) ? turn.followup_questions : [])
@@ -183,19 +187,13 @@ function Transcript({
                 <Text style={styles.userText}>{question}</Text>
               </View>
             ) : null}
-            {answer ? (
-              <View style={styles.botBubble}>
-                <FormattedSummary text={answer} compact />
-              </View>
-            ) : (
-              <View style={[styles.botBubble, styles.botBubbleMuted]}>
-                <Text style={styles.mutedText}>{t('history.noAnswer')}</Text>
-              </View>
-            )}
+            <View style={styles.botBubble}>
+              <FormattedSummary text={answer} compact />
+            </View>
             {followups.length > 0 ? (
               <View style={styles.followups}>
                 {followups.map((q) => (
-                  <Pressable
+                  <PressableScale
                     key={q}
                     style={({ pressed }) => [styles.followupChip, pressed && styles.followupChipPressed]}
                     onPress={() => onAskFollowup(q)}
@@ -203,7 +201,7 @@ function Transcript({
                   >
                     <Text style={styles.followupText}>{q}</Text>
                     <MaterialIcons name="arrow-forward" size={14} color={colors.blue[500]} />
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             ) : null}
@@ -319,7 +317,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
     paddingHorizontal: spacing[3],
   },
-  botBubbleMuted: { backgroundColor: colors.surface.line },
   // Suggested follow-ups for a turn: outlined chips under its answer.
   followups: { gap: spacing[1], alignSelf: 'stretch', paddingRight: spacing[2], marginTop: spacing[1] },
   followupChip: {
@@ -343,14 +340,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: -0.13,
     color: colors.blue[700],
-  },
-  mutedText: {
-    fontFamily: 'NationalPark_500Medium',
-    fontSize: 13,
-    lineHeight: 18,
-    letterSpacing: -0.13,
-    color: colors.text.disabled,
-    fontStyle: 'italic',
   },
   truncatedNote: {
     fontFamily: 'NationalPark_500Medium',

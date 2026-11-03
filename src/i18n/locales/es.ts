@@ -560,6 +560,9 @@ const es = {
     followUpPlaceholder: 'Haz una pregunta de seguimiento',
   },
   signIn: {
+    continueWithGoogle: 'Continuar con Google',
+    continueWithFacebook: 'Continuar con Facebook',
+    continueWithApple: 'Continuar con Apple',
     line1: 'Vamos a que te muevas',
     line2Prefix: 'por',
     line2Bold: 'Corea',

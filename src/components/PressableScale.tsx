@@ -43,7 +43,9 @@ export function PressableScale({
   const handleOut = useCallback(
     (e: GestureResponderEvent) => {
       setPressed(false);
-      scale.value = withSpring(1, { damping: 12, stiffness: 320 });
+      // One overshoot and settle (~0.45 damping ratio): at 12 the release
+      // rang visibly for ~2 s on a device trace.
+      scale.value = withSpring(1, { damping: 16, stiffness: 320 });
       onPressOut?.(e);
     },
     [onPressOut, scale],

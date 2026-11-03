@@ -560,6 +560,9 @@ const ja = {
     followUpPlaceholder: '追加の質問を入力',
   },
   signIn: {
+    continueWithGoogle: 'Googleで続行',
+    continueWithFacebook: 'Facebookで続行',
+    continueWithApple: 'Appleで続行',
     line1: '韓国を',
     line2Prefix: '巡る旅を',
     line2Bold: '韓国',

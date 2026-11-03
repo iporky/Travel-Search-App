@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
+import { StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme/tokens';
+import { PressableScale } from '../PressableScale';
 
 // Shared building blocks for the Profile suite — Figma "Profile for Aug
 // release" (section 12276:93796). Google (Material) icons throughout, as the
@@ -81,15 +82,15 @@ export function InfoRow({
       <Text style={styles.rowLabel}>{label.toUpperCase()}</Text>
       {body}
       {rightIcon && (
-        <Pressable style={styles.rowIcon} hitSlop={8} onPress={onRightIconPress ?? onPress} disabled={!onRightIconPress && !onPress}>
+        <PressableScale style={styles.rowIcon} hitSlop={8} onPress={onRightIconPress ?? onPress} disabled={!onRightIconPress && !onPress}>
           <MaterialIcons name={rightIcon} size={24} color={colors.gray[900]} />
-        </Pressable>
+        </PressableScale>
       )}
     </View>
   );
   return (
     <>
-      {onPress && !editable ? <Pressable onPress={onPress}>{content}</Pressable> : content}
+      {onPress && !editable ? <PressableScale onPress={onPress}>{content}</PressableScale> : content}
       {!last && <CardDivider />}
     </>
   );
@@ -117,9 +118,16 @@ export function IconButton({
   disabled?: boolean;
 }) {
   return (
-    <Pressable style={styles.iconBtn} hitSlop={6} onPress={onPress} disabled={disabled}>
+    <PressableScale
+      style={styles.iconBtn}
+      hitSlop={6}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={icon}
+    >
       <MaterialIcons name={icon} size={24} color={disabled ? colors.gray[600] : color} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -138,9 +146,9 @@ export function TopBar({
 }) {
   return (
     <View style={styles.topBar}>
-      <Pressable style={styles.iconBtn} hitSlop={8} onPress={onBack}>
+      <PressableScale style={styles.iconBtn} hitSlop={8} onPress={onBack}>
         <MaterialIcons name="chevron-left" size={28} color={colors.gray[1300]} />
-      </Pressable>
+      </PressableScale>
       <Text style={styles.topBarTitle} numberOfLines={1}>
         {title}
       </Text>
@@ -166,7 +174,7 @@ export function SettingsRow({
   onPress?: () => void;
 }) {
   return (
-    <Pressable
+    <PressableScale
       style={({ pressed }) => [styles.settingsRow, pressed && styles.settingsRowPressed]}
       onPress={onPress}
       disabled={!onPress}
@@ -176,7 +184,7 @@ export function SettingsRow({
         {label}
       </Text>
       {value ? <Text style={styles.settingsValue}>{value}</Text> : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -237,7 +245,7 @@ export function PrimaryButton({
   loading?: boolean;
 }) {
   return (
-    <Pressable
+    <PressableScale
       style={({ pressed }) => [
         styles.primaryBtn,
         (disabled || loading) && styles.primaryBtnDisabled,
@@ -247,7 +255,7 @@ export function PrimaryButton({
       disabled={disabled || loading}
     >
       <Text style={styles.primaryBtnText}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

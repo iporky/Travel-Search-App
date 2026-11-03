@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '../../theme/tokens';
 import { MiniCalendar } from '../buzz/MiniCalendar';
+import { AnimatedModal } from '../AnimatedModal';
+import { PressableScale } from '../PressableScale';
 
 // Events-tab filter sheet — same shell as the Vibes FilterSheet_Default
 // (Figma 11478:76763: draggable sheet, calendar, chip groups, Reset + Apply),
@@ -51,9 +53,9 @@ function ChipGroup<T extends string>({
       {options.map((opt) => {
         const active = selected.includes(opt);
         return (
-          <Pressable key={opt} style={[styles.chip, active && styles.chipActive]} onPress={() => onToggle(opt)}>
+          <PressableScale key={opt} style={[styles.chip, active && styles.chipActive]} onPress={() => onToggle(opt)}>
             <Text style={active ? styles.chipTextActive : styles.chipText}>{labelOf(opt)}</Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
@@ -83,15 +85,13 @@ export function EventFilterSheet({ visible, initial, categories, onClose, onAppl
   })();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} />
-      <View style={styles.wrap} pointerEvents="box-none">
+    <AnimatedModal visible={visible} onRequestClose={onClose} variant="sheet" scrimColor="rgba(29,25,43,0.4)">
         <View style={styles.sheet}>
           <View style={styles.handleRow}>
             <View style={styles.handle} />
-            <Pressable style={styles.resetBtn} onPress={() => setF(EMPTY_EVENT_FILTERS)}>
+            <PressableScale style={styles.resetBtn} onPress={() => setF(EMPTY_EVENT_FILTERS)}>
               <Text style={styles.resetText}>{t('vibes.reset')}</Text>
-            </Pressable>
+            </PressableScale>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -144,21 +144,18 @@ export function EventFilterSheet({ visible, initial, categories, onClose, onAppl
           </ScrollView>
 
           <View style={[styles.bottomBar, { paddingBottom: spacing[3] + insets.bottom }]}>
-            <Pressable style={styles.applyBtn} onPress={() => onApply(f)}>
+            <PressableScale style={styles.applyBtn} onPress={() => onApply(f)}>
               <Text style={styles.applyText}>{t('vibes.apply')}</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         </View>
-      </View>
-    </Modal>
+    </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(29,25,43,0.4)' },
-  wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    maxHeight: '90%',
+    maxHeight: Math.round(Dimensions.get('window').height * 0.9),
     backgroundColor: colors.surface.default,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,

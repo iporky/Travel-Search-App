@@ -560,6 +560,9 @@ const zhTW = {
     followUpPlaceholder: '輸入追加問題',
   },
   signIn: {
+    continueWithGoogle: '使用 Google 繼續',
+    continueWithFacebook: '使用 Facebook 繼續',
+    continueWithApple: '使用 Apple 繼續',
     line1: '讓我們帶你',
     line2Prefix: '暢遊',
     line2Bold: '韓國',

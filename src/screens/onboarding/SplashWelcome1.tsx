@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   GestureResponderEvent,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -11,6 +10,7 @@ import Animated, { Extrapolation, interpolate, SharedValue, useAnimatedStyle } f
 import { useTranslation } from 'react-i18next';
 import LottieView from 'lottie-react-native';
 import { AutoFitTitle } from '../../components/AutoFitTitle';
+import { PressableScale } from '../../components/PressableScale';
 
 // Designer's two-part Kiki: she runs in from the distance once, then waves
 // forever. Both are 720x720 transparent-WebP frame sequences, so they sit
@@ -86,7 +86,7 @@ export function SplashWelcome1({ onPress, active = true, scrollX, pageWidth }: P
   });
 
   return (
-    <Pressable onPress={onPress} style={styles.root}>
+    <PressableScale onPress={onPress} style={styles.root}>
       {/* Kiki runs in, then keeps waving — the only bird on this slide. The
           pager's scroll adds a touch of depth as it leaves. */}
       <Animated.View pointerEvents="none" style={[styles.lottieWrap, depthStyle]}>
@@ -131,7 +131,7 @@ export function SplashWelcome1({ onPress, active = true, scrollX, pageWidth }: P
         </View>
         {/* Pagination dots are rendered once, stationary, in OnboardingScreen. */}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
